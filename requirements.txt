@@ -1,0 +1,10 @@
+# Utility libraries
+colorama
+rich
+
+# Development & Testing
+pytest
+pytest-cov
+
+# (Optional but consigliati)
+toml

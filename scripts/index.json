@@ -1,0 +1,32 @@
+{
+    "Dispatcher": [
+        {
+            "name": "RestartDispatcher",
+            "description": "Riavvia il servizio Dispatcher",
+            "path": "dispatcher/restart_dispatcher.ps1",
+            "params": ["-Force", "-Verbose"]
+        }
+    ],
+    "Indexer": [
+        {
+            "name": "ReindexData",
+            "description": "Rindicizza tutti i dati",
+            "path": "indexer/reindex.ps1",
+            "params": ["-Full"]
+        }
+    ],
+    "RoboTC": [
+        {
+            "name": "Extract Organization Information",
+            "description": "Estrae le informazioni utente dall'organizzazione",
+            "path": "RoboTC/RunMe_ExtractOrganizationInformation.bat",
+            "params": ["-Full"]
+        },
+        {
+            "name": "User Manegement",
+            "description": "Aggiorna/Crea/Rimuovi properties utente",
+            "path": "RoboTC/RunMe_UserManager.bat",
+            "params": ["-Full"]
+        }
+    ]
+}
