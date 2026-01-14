@@ -5,7 +5,8 @@
             "description": "Riavvia il servizio Dispatcher",
             "path": "dispatcher/restart_dispatcher.ps1",
             "params": "",
-            "division": "LED"
+            "division": "LED",
+            "run_as_admin": false
         },
         {
             "name": "test",

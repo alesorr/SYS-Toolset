@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QListWidget, QListWidgetItem,
     QTextEdit, QSplitter, QMessageBox, QDialog,
     QDialogButtonBox, QScrollArea, QFrame, QProgressBar,
-    QLineEdit, QComboBox
+    QLineEdit, QComboBox, QTabWidget
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer
 from PyQt6.QtGui import QIcon, QFont, QColor
@@ -34,16 +34,46 @@ class ScriptExecutorThread(QThread):
     error_signal = pyqtSignal(str)
     finished_signal = pyqtSignal()
 
-    def __init__(self, script_path, log_file_path=None, params=None):
+    def __init__(self, script_path, log_file_path=None, params=None, run_as_admin=False):
         super().__init__()
         self.script_path = script_path
         self.log_file_path = log_file_path
         self.params = params or []
+        self.run_as_admin = run_as_admin
         self.process = None
         self._stop_requested = False
 
     def run(self):
         try:
+            # Se richiesta esecuzione come admin su Windows
+            if self.run_as_admin and os.name == 'nt':
+                import ctypes
+                # Costruisci il comando
+                if self.script_path.endswith(".ps1"):
+                    exe = "powershell.exe"
+                    params = f"-ExecutionPolicy Bypass -NoProfile -File \"{self.script_path}\" {' '.join(self.params)}"
+                elif self.script_path.endswith(".bat") or self.script_path.endswith(".cmd"):
+                    exe = self.script_path
+                    params = ' '.join(self.params)
+                elif self.script_path.endswith(".py"):
+                    exe = "python.exe"
+                    params = f"-u \"{self.script_path}\" {' '.join(self.params)}"
+                else:
+                    self.error_signal.emit(f"Tipo di script non supportato: {self.script_path}")
+                    self.finished_signal.emit()
+                    return
+                
+                # ShellExecute con "runas" per richiedere privilegi admin
+                result = ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, params, None, 1)
+                if result <= 32:
+                    self.error_signal.emit(f"Impossibile eseguire come amministratore. Codice errore: {result}")
+                else:
+                    self.output_signal.emit("[INFO] Script avviato con privilegi amministrativi")
+                    self.output_signal.emit("[AVVISO] L'output real-time non è disponibile per script eseguiti come amministratore")
+                self.finished_signal.emit()
+                return
+            
+            # Esecuzione normale (senza privilegi admin)
             # Opzioni per nascondere la finestra della console
             startupinfo = None
             creationflags = 0
@@ -280,6 +310,30 @@ class MainWindow(QMainWindow):
         """)
         toolbar.addWidget(self.add_module_button)
         toolbar.addWidget(self.refresh_button)
+        
+        # Bottone impostazioni
+        self.settings_button = QPushButton("⚙ Impostazioni")
+        self.settings_button.setMaximumHeight(28)
+        self.settings_button.clicked.connect(self.on_settings_clicked)
+        self.settings_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self.config.primary_color};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-weight: bold;
+                font-size: 10pt;
+            }}
+            QPushButton:hover {{
+                background-color: {self.config.primary_hover};
+            }}
+            QPushButton:pressed {{
+                background-color: #1565C0;
+            }}
+        """)
+        toolbar.addWidget(self.settings_button)
+        
         toolbar.addStretch()
         left_layout.addLayout(toolbar)
 
@@ -822,10 +876,32 @@ class MainWindow(QMainWindow):
             params = params_raw.split() if params_raw else []
         else:
             params = []
+        
+        # Ottieni flag run_as_admin
+        run_as_admin = self.current_script.get('run_as_admin', False)
+        
+        # Costruisci e mostra il comando completo
+        if script_path.endswith(".ps1"):
+            cmd_display = f"powershell -ExecutionPolicy Bypass -NoProfile -File \"{script_path}\""
+        elif script_path.endswith(".py"):
+            cmd_display = f"python -u \"{script_path}\""
+        else:
+            cmd_display = f"\"{script_path}\""
+        
         if params:
+            cmd_display += f" {' '.join(params)}"
             logger.info(f"Parametri: {params}")
         
-        self.executor_thread = ScriptExecutorThread(script_path, str(script_log_file) if script_log_file else None, params)
+        if run_as_admin:
+            cmd_display = f"[ADMIN] {cmd_display}"
+            logger.info("Running as administrator")
+        
+        # Mostra il comando nell'output
+        self.output_text.append(f"\n📌 Comando: {cmd_display}\n")
+        if script_log_file:
+            self._write_to_current_log(f"\nComando: {cmd_display}\n")
+        
+        self.executor_thread = ScriptExecutorThread(script_path, str(script_log_file) if script_log_file else None, params, run_as_admin)
         self.executor_thread.output_signal.connect(self.append_output)
         self.executor_thread.error_signal.connect(self.append_error)
         self.executor_thread.finished_signal.connect(self.on_execution_finished)
@@ -883,6 +959,10 @@ class MainWindow(QMainWindow):
         """Gestisce il click sul bottone refresh"""
         from utils.logger import logger
         
+        # Salva lo stato corrente prima del refresh
+        self.saved_category = self.current_category
+        self.saved_script_name = self.current_script['name'] if self.current_script else None
+        
         logger.info(f"Refresh clicked! Scripts dir: {self.config.scripts_dir}")
         self.output_text.setText(f"[REFRESH] Usando scripts_dir: {self.config.scripts_dir}")
         
@@ -916,14 +996,35 @@ class MainWindow(QMainWindow):
             for category in repo_categories:
                 self.categories_list.addItem(category)
         
-        # Resetta selezione
-        self.script_name_label.setText("Seleziona uno script")
-        self.description_label.setText("")
-        self.exec_button.setEnabled(False)
-        self.doc_button.setEnabled(False)
-        self.view_code_button.setEnabled(False)
-        self.current_script = None
-        self.current_category = None
+        # Ripristina lo stato salvato
+        if hasattr(self, 'saved_category') and self.saved_category:
+            # Trova e seleziona la categoria salvata
+            items = self.categories_list.findItems(self.saved_category, Qt.MatchFlag.MatchExactly)
+            if items:
+                self.categories_list.setCurrentItem(items[0])
+                # Trigger manuale per ricaricare gli script della categoria
+                self.on_category_selected()
+                
+                # Ripristina lo script salvato
+                if hasattr(self, 'saved_script_name') and self.saved_script_name:
+                    for i in range(self.scripts_list.count()):
+                        item = self.scripts_list.item(i)
+                        # Confronta con il nome dello script salvato
+                        script_data = item.data(Qt.ItemDataRole.UserRole)
+                        if script_data and script_data.get('name') == self.saved_script_name:
+                            self.scripts_list.setCurrentItem(item)
+                            self.on_script_selected()
+                            break
+        
+        if not hasattr(self, 'saved_category') or not self.saved_category:
+            # Nessuno stato da ripristinare, resetta tutto
+            self.script_name_label.setText("Seleziona uno script")
+            self.description_label.setText("")
+            self.exec_button.setEnabled(False)
+            self.doc_button.setEnabled(False)
+            self.view_code_button.setEnabled(False)
+            self.current_script = None
+            self.current_category = None
         
         self.output_text.append("[OK] Script ricaricati!")
         
@@ -1040,6 +1141,32 @@ class MainWindow(QMainWindow):
             if dialog.exec():
                 script_info = dialog.get_script_info()
                 self.create_script(script_info)
+        finally:
+            overlay.hide()
+            overlay.deleteLater()
+
+    def on_settings_clicked(self):
+        """Apre il dialog delle impostazioni"""
+        # Overlay scuro
+        overlay = QWidget(self)
+        overlay.setGeometry(self.rect())
+        overlay.setStyleSheet("background-color: rgba(0, 0, 0, 120);")
+        overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        overlay.show()
+        overlay.raise_()
+
+        dialog = SettingsDialog(self)
+        dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+
+        # Centra il dialog
+        dialog.adjustSize()
+        parent_center = self.frameGeometry().center()
+        dialog_rect = dialog.frameGeometry()
+        dialog_rect.moveCenter(parent_center)
+        dialog.move(dialog_rect.topLeft())
+
+        try:
+            dialog.exec()
         finally:
             overlay.hide()
             overlay.deleteLater()
@@ -1290,7 +1417,8 @@ class MainWindow(QMainWindow):
                                 "description": new_script_info['description'],
                                 "path": f"{self.current_category}/{new_script_info['filename']}",
                                 "params": new_script_info.get('params', ''),
-                                "division": new_script_info.get('division', 'LED')
+                                "division": new_script_info.get('division', 'LED'),
+                                "run_as_admin": new_script_info.get('run_as_admin', False)
                             }
                             break
                     
@@ -1956,6 +2084,30 @@ class EditScriptDialog(QDialog):
         self.params_input.setPlaceholderText("Es: -arg1 value1 -arg2 value2")
         layout.addWidget(self.params_input)
         
+        # Checkbox per esecuzione come amministratore
+        from PyQt6.QtWidgets import QCheckBox
+        self.admin_checkbox = QCheckBox("Esegui come amministratore")
+        self.admin_checkbox.setChecked(self.script.get('run_as_admin', False))
+        self.admin_checkbox.setStyleSheet("""
+            QCheckBox {
+                color: black;
+                font-size: 10pt;
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border: 2px solid #cccccc;
+                border-radius: 3px;
+                background-color: white;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #2196F3;
+                border-color: #2196F3;
+            }
+        """)
+        layout.addWidget(self.admin_checkbox)
+        
         # Codice script
         code_label = QLabel("Codice Script:")
         layout.addWidget(code_label)
@@ -1991,7 +2143,8 @@ class EditScriptDialog(QDialog):
             'description': self.desc_input.text().strip() or "Nessuna descrizione",
             'code': self.code_input.toPlainText().strip(),
             'division': self.division_combo.currentText(),
-            'params': self.params_input.text().strip()
+            'params': self.params_input.text().strip(),
+            'run_as_admin': self.admin_checkbox.isChecked()
         }
 
     def accept(self):
@@ -2100,6 +2253,388 @@ class EditScriptDialog(QDialog):
             return
         
         super().accept()
+
+
+class SettingsDialog(QDialog):
+    """Dialog per modificare le impostazioni dell'applicazione"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("⚙ Impostazioni Applicazione")
+        self.setGeometry(100, 100, 800, 600)
+        self.setStyleSheet("QDialog { background-color: white; }")
+        
+        # Path del file config.ini - usa path assoluto dalla root del progetto
+        import os
+        import sys
+        
+        # Determina la directory base
+        if getattr(sys, 'frozen', False):
+            base_dir = Path(sys._MEIPASS).parent
+        else:
+            base_dir = Path(__file__).parent.parent.parent
+        
+        self.config_path = base_dir / "config" / "config.ini"
+        
+        # Dizionario per tenere traccia dei campi
+        self.fields = {}
+        
+        self.initUI()
+    
+    def initUI(self):
+        layout = QVBoxLayout()
+        layout.setSpacing(0)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Titolo
+        title = QLabel("⚙ Configurazione Applicazione")
+        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        title.setStyleSheet("color: #2196F3; padding: 16px; background-color: #f5f5f5;")
+        layout.addWidget(title)
+        
+        # Scroll area principale per tutte le sezioni
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: white;
+            }
+            QScrollBar:vertical {
+                background-color: #f0f0f0;
+                width: 14px;
+                border-radius: 7px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #2196F3;
+                border-radius: 7px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #1976D2;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                border: none;
+                background: none;
+            }
+        """)
+        
+        # Container per tutte le sezioni
+        container = QWidget()
+        container.setStyleSheet("background-color: white;")
+        container_layout = QVBoxLayout()
+        container_layout.setSpacing(20)
+        container_layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Leggi il file config.ini (disabilita interpolazione per evitare problemi con %)
+        import configparser
+        config = configparser.ConfigParser(interpolation=None)
+        if self.config_path.exists():
+            config.read(self.config_path, encoding='utf-8')
+        
+        # Crea una sezione per ogni gruppo nel config
+        for section in config.sections():
+            section_widget = self.create_section_widget(config, section)
+            container_layout.addWidget(section_widget)
+        
+        container.setLayout(container_layout)
+        scroll.setWidget(container)
+        layout.addWidget(scroll)
+        
+        # Info riavvio
+        info_label = QLabel("ℹ️ Alcune modifiche potrebbero richiedere il riavvio dell'applicazione")
+        info_label.setStyleSheet("""
+            color: #666;
+            background-color: #fff3cd;
+            padding: 10px;
+            border-radius: 4px;
+            border-left: 4px solid #FF9800;
+            margin: 10px;
+        """)
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+        
+        # Bottoni
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setContentsMargins(10, 10, 10, 10)
+        
+        save_button = QPushButton("💾 Salva")
+        save_button.clicked.connect(self.save_settings)
+        save_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 10px 24px;
+                font-weight: bold;
+                font-size: 11pt;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:pressed {
+                background-color: #3d8b40;
+            }
+        """)
+        buttons_layout.addWidget(save_button)
+        
+        cancel_button = QPushButton("Annulla")
+        cancel_button.clicked.connect(self.reject)
+        cancel_button.setStyleSheet("""
+            QPushButton {
+                background-color: #f5f5f5;
+                color: #333;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                padding: 10px 24px;
+                font-weight: bold;
+                font-size: 11pt;
+            }
+            QPushButton:hover {
+                background-color: #e0e0e0;
+            }
+        """)
+        buttons_layout.addWidget(cancel_button)
+        
+        layout.addLayout(buttons_layout)
+        self.setLayout(layout)
+    
+    def create_section_widget(self, config, section):
+        """Crea un widget per una sezione del config"""
+        section_widget = QWidget()
+        section_widget.setStyleSheet("""
+            QWidget {
+                background-color: white;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+            }
+        """)
+        section_layout = QVBoxLayout()
+        section_layout.setContentsMargins(16, 16, 16, 16)
+        section_layout.setSpacing(12)
+        
+        # Titolo sezione
+        section_title = QLabel(section.upper())
+        section_title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        section_title.setStyleSheet("""
+            color: #2196F3;
+            background-color: transparent;
+            border: none;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #2196F3;
+        """)
+        section_layout.addWidget(section_title)
+        
+        # Aggiungi i campi per ogni chiave della sezione
+        for key in config[section]:
+            value = config[section][key]
+            
+            # Container per ogni campo
+            field_layout = QHBoxLayout()
+            field_layout.setSpacing(12)
+            
+            # Label con il nome della chiave
+            label = QLabel(key.replace('_', ' ').title() + ":")
+            label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+            label.setStyleSheet("color: #333; background-color: transparent; border: none;")
+            label.setMinimumWidth(200)
+            label.setMaximumWidth(200)
+            field_layout.addWidget(label)
+            
+            # Campo di input
+            if value.lower() in ['true', 'false']:
+                # Checkbox per booleani
+                from PyQt6.QtWidgets import QCheckBox
+                input_field = QCheckBox("Abilitato")
+                input_field.setChecked(value.lower() == 'true')
+                input_field.setStyleSheet("""
+                    QCheckBox {
+                        color: black;
+                        spacing: 8px;
+                        background-color: transparent;
+                        border: none;
+                    }
+                    QCheckBox::indicator {
+                        width: 18px;
+                        height: 18px;
+                        border: 2px solid #cccccc;
+                        border-radius: 3px;
+                        background-color: white;
+                    }
+                    QCheckBox::indicator:checked {
+                        background-color: #2196F3;
+                        border-color: #2196F3;
+                    }
+                """)
+                field_layout.addWidget(input_field)
+                self.fields[f"{section}.{key}"] = input_field
+            elif key.endswith('_color') or value.startswith('#'):
+                # Input con preview colore
+                input_field = QLineEdit(value)
+                input_field.setPlaceholderText("#RRGGBB")
+                input_field.setMaximumWidth(150)
+                input_field.setStyleSheet("""
+                    QLineEdit {
+                        background-color: white;
+                        border: 1px solid #ddd;
+                        border-radius: 4px;
+                        padding: 8px;
+                        color: black;
+                    }
+                    QLineEdit:focus {
+                        border: 2px solid #2196F3;
+                    }
+                """)
+                
+                color_preview = QLabel("   ")
+                color_preview.setStyleSheet(f"background-color: {value}; border: 1px solid #ddd; border-radius: 3px;")
+                color_preview.setFixedSize(30, 30)
+                
+                # Update preview quando cambia il valore
+                def update_preview(text, preview=color_preview):
+                    if text.startswith('#') and len(text) == 7:
+                        preview.setStyleSheet(f"background-color: {text}; border: 1px solid #ddd; border-radius: 3px;")
+                input_field.textChanged.connect(update_preview)
+                
+                field_layout.addWidget(input_field)
+                field_layout.addWidget(color_preview)
+                self.fields[f"{section}.{key}"] = input_field
+            elif value.isdigit():
+                # Spinbox per numeri
+                from PyQt6.QtWidgets import QSpinBox
+                input_field = QSpinBox()
+                input_field.setRange(0, 10000)
+                input_field.setValue(int(value))
+                input_field.setMaximumWidth(150)
+                input_field.setStyleSheet("""
+                    QSpinBox {
+                        background-color: white;
+                        border: 1px solid #ddd;
+                        border-radius: 4px;
+                        padding: 8px;
+                        color: black;
+                    }
+                    QSpinBox:focus {
+                        border: 2px solid #2196F3;
+                    }
+                """)
+                field_layout.addWidget(input_field)
+                self.fields[f"{section}.{key}"] = input_field
+            else:
+                # QLineEdit per stringhe
+                input_field = QLineEdit(value)
+                input_field.setStyleSheet("""
+                    QLineEdit {
+                        background-color: white;
+                        border: 1px solid #ddd;
+                        border-radius: 4px;
+                        padding: 8px;
+                        color: black;
+                    }
+                    QLineEdit:focus {
+                        border: 2px solid #2196F3;
+                    }
+                """)
+                field_layout.addWidget(input_field)
+                self.fields[f"{section}.{key}"] = input_field
+            
+            field_layout.addStretch()
+            section_layout.addLayout(field_layout)
+        
+        section_widget.setLayout(section_layout)
+        return section_widget
+    
+    def save_settings(self):
+        """Salva le impostazioni nel file config.ini"""
+        import configparser
+        
+        config = configparser.ConfigParser(interpolation=None)
+        if self.config_path.exists():
+            config.read(self.config_path, encoding='utf-8')
+        
+        # Aggiorna i valori dal form
+        from PyQt6.QtWidgets import QCheckBox, QSpinBox
+        for field_key, field_widget in self.fields.items():
+            section, key = field_key.split('.', 1)
+            
+            if isinstance(field_widget, QCheckBox):
+                value = 'true' if field_widget.isChecked() else 'false'
+            elif isinstance(field_widget, QSpinBox):
+                value = str(field_widget.value())
+            else:
+                value = field_widget.text().strip()
+            
+            if section in config:
+                config[section][key] = value
+                print(f"[DEBUG] Updating {section}.{key} = {value}")
+        
+        # Scrivi il file
+        try:
+            print(f"[DEBUG] Saving to: {self.config_path}")
+            print(f"[DEBUG] File exists: {self.config_path.exists()}")
+            
+            with open(self.config_path, 'w', encoding='utf-8') as f:
+                config.write(f)
+            
+            print(f"[DEBUG] File saved successfully")
+            
+            # Messaggio di successo
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Information)
+            msg_box.setWindowTitle("Successo")
+            msg_box.setText("Impostazioni salvate con successo!")
+            msg_box.setInformativeText("Le modifiche saranno applicate al prossimo riavvio dell'applicazione.")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QMessageBox QLabel {
+                    color: black;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #2196F3;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 16px;
+                    min-width: 80px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #1976D2;
+                }
+            """)
+            msg_box.exec()
+            self.accept()
+            
+        except Exception as e:
+            # Messaggio di errore
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Critical)
+            msg_box.setWindowTitle("Errore")
+            msg_box.setText(f"Errore nel salvataggio delle impostazioni:\n{str(e)}")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QMessageBox QLabel {
+                    color: black;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #F44336;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 16px;
+                    min-width: 80px;
+                    font-weight: bold;
+                }
+            """)
+            msg_box.exec()
 
 
 class ScriptCodeViewer(QDialog):

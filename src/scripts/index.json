@@ -3,11 +3,10 @@
         {
             "name": "RestartDispatcher",
             "description": "Riavvia il servizio Dispatcher",
-            "path": "dispatcher/restart_dispatcher",
-            "params": [
-                "-Force",
-                "-Verbose"
-            ]
+            "path": "dispatcher/restart_dispatcher.ps1",
+            "params": "",
+            "division": "LED",
+            "run_as_admin": false
         },
         {
             "name": "test",
