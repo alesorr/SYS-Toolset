@@ -77,11 +77,30 @@ class ConfigManager:
             'logs_directory': 'logs',
         }
         self._config['APP'] = {
-            'title': 'SYS Toolset Management Console',
+            'title': 'SYS Toolset Management',
             'version': '1.0.0',
             'window_width': '1200',
             'window_height': '700',
             'debug': 'false',
+        }
+        self._config['SPLASH'] = {
+            'title': 'SYS Toolset Management Console',
+            'subtitle': 'Automation & Management Platform',
+            'width': '500',
+            'height': '300',
+            'background_color': '#2D2D30',
+            'title_color': '#FFFFFF',
+            'subtitle_color': '#CCCCCC',
+            'progress_color': '#0078D4',
+            'font_family': 'Segoe UI',
+            'title_font_size': '24',
+        }
+        self._config['COLORS'] = {
+            'primary_color': '#2196F3',
+            'success_color': '#4CAF50',
+            'warning_color': '#FF9800',
+            'led_color': '#B3E5FC',
+            'lhd_color': '#C8E6C9',
         }
         self._config['UI'] = {
             'theme': 'light',
@@ -201,6 +220,146 @@ class ConfigManager:
     def config_file(self):
         """Percorso del file di configurazione"""
         return self._config_path
+    
+    # ===== SPLASH SCREEN PROPERTIES =====
+    
+    @property
+    def splash_title(self):
+        """Titolo dello splash screen"""
+        return self.get('SPLASH', 'title', 'SYS Toolset Management Console')
+    
+    @property
+    def splash_subtitle(self):
+        """Sottotitolo dello splash screen"""
+        return self.get('SPLASH', 'subtitle', 'Automation & Management Platform')
+    
+    @property
+    def splash_size(self):
+        """Dimensione splash screen (width, height)"""
+        width = self.get_int('SPLASH', 'width', 500)
+        height = self.get_int('SPLASH', 'height', 300)
+        return (width, height)
+    
+    @property
+    def splash_bg_color(self):
+        """Colore sfondo splash screen"""
+        return self.get('SPLASH', 'background_color', '#2D2D30')
+    
+    @property
+    def splash_title_color(self):
+        """Colore titolo splash screen"""
+        return self.get('SPLASH', 'title_color', '#FFFFFF')
+    
+    @property
+    def splash_subtitle_color(self):
+        """Colore sottotitolo splash screen"""
+        return self.get('SPLASH', 'subtitle_color', '#CCCCCC')
+    
+    @property
+    def splash_status_color(self):
+        """Colore messaggio di stato splash screen"""
+        return self.get('SPLASH', 'status_color', '#AAAAAA')
+    
+    @property
+    def splash_version_color(self):
+        """Colore versione splash screen"""
+        return self.get('SPLASH', 'version_color', '#666666')
+    
+    @property
+    def splash_progress_color(self):
+        """Colore barra progresso splash screen"""
+        return self.get('SPLASH', 'progress_color', '#0078D4')
+    
+    @property
+    def splash_progress_bg(self):
+        """Colore sfondo barra progresso"""
+        return self.get('SPLASH', 'progress_background', '#3C3C3C')
+    
+    @property
+    def splash_font_family(self):
+        """Font family splash screen"""
+        return self.get('SPLASH', 'font_family', 'Segoe UI')
+    
+    @property
+    def splash_title_font_size(self):
+        """Dimensione font titolo splash"""
+        return self.get_int('SPLASH', 'title_font_size', 24)
+    
+    @property
+    def splash_subtitle_font_size(self):
+        """Dimensione font sottotitolo splash"""
+        return self.get_int('SPLASH', 'subtitle_font_size', 10)
+    
+    @property
+    def splash_status_font_size(self):
+        """Dimensione font status splash"""
+        return self.get_int('SPLASH', 'status_font_size', 9)
+    
+    @property
+    def splash_version_font_size(self):
+        """Dimensione font versione splash"""
+        return self.get_int('SPLASH', 'version_font_size', 8)
+    
+    # ===== COLOR THEME PROPERTIES =====
+    
+    def get_color(self, color_key, fallback='#2196F3'):
+        """Ottiene un colore dalla sezione COLORS"""
+        return self.get('COLORS', color_key, fallback)
+    
+    @property
+    def primary_color(self):
+        """Colore primario tema"""
+        return self.get_color('primary_color', '#2196F3')
+    
+    @property
+    def primary_hover(self):
+        """Colore primario hover"""
+        return self.get_color('primary_hover', '#1976D2')
+    
+    @property
+    def primary_pressed(self):
+        """Colore primario pressed"""
+        return self.get_color('primary_pressed', '#0D47A1')
+    
+    @property
+    def success_color(self):
+        """Colore success"""
+        return self.get_color('success_color', '#4CAF50')
+    
+    @property
+    def success_hover(self):
+        """Colore success hover"""
+        return self.get_color('success_hover', '#45a049')
+    
+    @property
+    def success_pressed(self):
+        """Colore success pressed"""
+        return self.get_color('success_pressed', '#3d8b40')
+    
+    @property
+    def warning_color(self):
+        """Colore warning"""
+        return self.get_color('warning_color', '#FF9800')
+    
+    @property
+    def warning_hover(self):
+        """Colore warning hover"""
+        return self.get_color('warning_hover', '#F57C00')
+    
+    @property
+    def warning_pressed(self):
+        """Colore warning pressed"""
+        return self.get_color('warning_pressed', '#E65100')
+    
+    @property
+    def led_color(self):
+        """Colore label LED"""
+        return self.get_color('led_color', '#B3E5FC')
+    
+    @property
+    def lhd_color(self):
+        """Colore label LHD"""
+        return self.get_color('lhd_color', '#C8E6C9')
     
     def print_info(self):
         """Stampa informazioni di configurazione (debug)"""

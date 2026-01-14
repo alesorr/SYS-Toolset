@@ -160,30 +160,30 @@ class MainWindow(QMainWindow):
     
     def _style_messagebox(self, msg_box):
         """Applica lo stile uniforme a tutti i QMessageBox"""
-        msg_box.setStyleSheet("""
-            QMessageBox {
+        msg_box.setStyleSheet(f"""
+            QMessageBox {{
                 background-color: white;
-            }
-            QMessageBox QLabel {
+            }}
+            QMessageBox QLabel {{
                 color: black;
                 background-color: white;
                 font-size: 10pt;
-            }
-            QPushButton {
-                background-color: #2196F3;
+            }}
+            QPushButton {{
+                background-color: {self.config.primary_color};
                 color: white;
                 border: none;
                 border-radius: 4px;
                 padding: 6px 16px;
                 min-width: 80px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-            QPushButton:pressed {
-                background-color: #0D47A1;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {self.config.primary_hover};
+            }}
+            QPushButton:pressed {{
+                background-color: {self.config.primary_pressed};
+            }}
         """)
 
     def initUI(self):
@@ -206,44 +206,44 @@ class MainWindow(QMainWindow):
         self.add_module_button.setMaximumWidth(100)
         self.add_module_button.setMaximumHeight(28)
         self.add_module_button.clicked.connect(self.on_add_module_clicked)
-        self.add_module_button.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
+        self.add_module_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self.config.success_color};
                 color: white;
                 border: none;
                 border-radius: 4px;
                 padding: 4px 8px;
                 font-weight: bold;
                 font-size: 10pt;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-            QPushButton:pressed {
-                background-color: #3d8b40;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {self.config.success_hover};
+            }}
+            QPushButton:pressed {{
+                background-color: {self.config.success_pressed};
+            }}
         """)
         
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.setMaximumWidth(80)
         self.refresh_button.setMaximumHeight(28)
         self.refresh_button.clicked.connect(self.on_refresh_clicked)
-        self.refresh_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
+        self.refresh_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self.config.primary_color};
                 color: white;
                 border: none;
                 border-radius: 4px;
                 padding: 4px 8px;
                 font-weight: bold;
                 font-size: 10pt;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-            QPushButton:pressed {
+            }}
+            QPushButton:hover {{
+                background-color: {self.config.primary_hover};
+            }}
+            QPushButton:pressed {{
                 background-color: #1565C0;
-            }
+            }}
         """)
         toolbar.addWidget(self.add_module_button)
         toolbar.addWidget(self.refresh_button)
@@ -253,7 +253,7 @@ class MainWindow(QMainWindow):
         # Progress bar (nascosta di default)
         self.progress_bar = QProgressBar()
         self.progress_bar.setMaximumHeight(6)
-        self.progress_bar.setStyleSheet("QProgressBar { border: none; background-color: #f0f0f0; } QProgressBar::chunk { background-color: #2196F3; }")
+        self.progress_bar.setStyleSheet(f"QProgressBar {{ border: none; background-color: #f0f0f0; }} QProgressBar::chunk {{ background-color: {self.config.primary_color}; }}")
         self.progress_bar.setVisible(False)
         left_layout.addWidget(self.progress_bar)
 
@@ -345,7 +345,7 @@ class MainWindow(QMainWindow):
         # Nome script
         self.script_name_label = QLabel("Seleziona uno script")
         self.script_name_label.setFont(QFont("Arial", 11, QFont.Weight.Bold))
-        self.script_name_label.setStyleSheet("color: #2196F3;")
+        self.script_name_label.setStyleSheet(f"color: {self.config.primary_color};")
         right_layout.addWidget(self.script_name_label)
 
         # Descrizione
@@ -403,22 +403,22 @@ class MainWindow(QMainWindow):
         self.view_code_button = QPushButton("👁 Visualizza Codice")
         self.view_code_button.setEnabled(False)
         self.view_code_button.clicked.connect(self.show_script_code)
-        self.view_code_button.setStyleSheet("""
-            QPushButton {
-                background-color: #FF9800;
+        self.view_code_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self.config.warning_color};
                 color: white;
                 padding: 8px;
                 font-weight: bold;
                 border: none;
                 border-radius: 4px;
-            }
-            QPushButton:hover:enabled {
-                background-color: #F57C00;
-            }
-            QPushButton:disabled {
+            }}
+            QPushButton:hover:enabled {{
+                background-color: {self.config.warning_hover};
+            }}
+            QPushButton:disabled {{
                 background-color: #cccccc;
                 color: #666666;
-            }
+            }}
         """)
         buttons_layout.addWidget(self.view_code_button)
 
