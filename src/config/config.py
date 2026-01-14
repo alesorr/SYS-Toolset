@@ -47,10 +47,21 @@ class ConfigManager:
         
         # 1. Prova nella cartella dell'eseguibile (per exe)
         if getattr(sys, 'frozen', False):
+            # OneFile: prima cerca accanto all'exe (per config modificabile)
             exe_dir = Path(sys.executable).parent
+            config_file = exe_dir / 'config' / 'config.ini'
+            if config_file.exists():
+                return config_file
             config_file = exe_dir / 'config.ini'
             if config_file.exists():
                 return config_file
+            
+            # OneFile: poi cerca in _MEIPASS (config embedded)
+            if hasattr(sys, '_MEIPASS'):
+                meipass_dir = Path(sys._MEIPASS)
+                config_file = meipass_dir / 'config' / 'config.ini'
+                if config_file.exists():
+                    return config_file
         
         # 2. Prova nella cartella config/
         config_file = Path('config') / 'config.ini'

@@ -546,6 +546,28 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(self.output_text)
 
         main_layout.addWidget(right_panel, 2)
+        
+        # Footer con versione
+        footer_widget = QWidget()
+        footer_widget.setStyleSheet("background-color: #f5f5f5; border-top: 1px solid #ddd;")
+        footer_layout = QHBoxLayout(footer_widget)
+        footer_layout.setContentsMargins(10, 5, 10, 5)
+        
+        footer_layout.addStretch()
+        
+        version_label = QLabel(f"Versione {self.config.app_version}")
+        version_label.setStyleSheet("color: #666; font-size: 9pt;")
+        footer_layout.addWidget(version_label)
+        
+        footer_layout.addStretch()
+        
+        # Aggiungi il footer al layout principale del central_widget
+        central_widget_layout = QVBoxLayout()
+        central_widget_layout.setContentsMargins(0, 0, 0, 0)
+        central_widget_layout.setSpacing(0)
+        central_widget_layout.addLayout(main_layout)
+        central_widget_layout.addWidget(footer_widget)
+        central_widget.setLayout(central_widget_layout)
 
         # Applica stili
         self.apply_styles()
@@ -2269,8 +2291,10 @@ class SettingsDialog(QDialog):
         
         # Determina la directory base
         if getattr(sys, 'frozen', False):
-            base_dir = Path(sys._MEIPASS).parent
+            # Se è un eseguibile, usa la directory dell'eseguibile
+            base_dir = Path(sys.executable).parent
         else:
+            # Se è Python script, usa la directory del progetto
             base_dir = Path(__file__).parent.parent.parent
         
         self.config_path = base_dir / "config" / "config.ini"
