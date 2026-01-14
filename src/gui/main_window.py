@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QListWidget, QListWidgetItem,
     QTextEdit, QSplitter, QMessageBox, QDialog,
     QDialogButtonBox, QScrollArea, QFrame, QProgressBar,
-    QLineEdit
+    QLineEdit, QComboBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer
 from PyQt6.QtGui import QIcon, QFont, QColor
@@ -139,6 +139,34 @@ class MainWindow(QMainWindow):
         self.current_script = None
 
         self.initUI()
+    
+    def _style_messagebox(self, msg_box):
+        """Applica lo stile uniforme a tutti i QMessageBox"""
+        msg_box.setStyleSheet("""
+            QMessageBox {
+                background-color: white;
+            }
+            QMessageBox QLabel {
+                color: black;
+                background-color: white;
+                font-size: 10pt;
+            }
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 16px;
+                min-width: 80px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:pressed {
+                background-color: #0D47A1;
+            }
+        """)
 
     def initUI(self):
         self.setWindowTitle(self.config.app_title)
@@ -256,6 +284,27 @@ class MainWindow(QMainWindow):
         """)
         scripts_header_layout.addWidget(self.add_script_button)
         left_layout.addLayout(scripts_header_layout)
+        
+        # Barra di ricerca per script
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("🔍 Cerca script...")
+        self.search_input.setMaximumHeight(30)
+        self.search_input.textChanged.connect(self.on_search_changed)
+        self.search_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #f5f5f5;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                padding: 5px 10px;
+                color: black;
+                font-size: 9pt;
+            }
+            QLineEdit:focus {
+                border: 2px solid #2196F3;
+                background-color: white;
+            }
+        """)
+        left_layout.addWidget(self.search_input)
 
         # Lista script
         self.scripts_list = QListWidget()
@@ -332,6 +381,28 @@ class MainWindow(QMainWindow):
             }
         """)
         buttons_layout.addWidget(self.doc_button)
+        
+        self.view_code_button = QPushButton("👁 Visualizza Codice")
+        self.view_code_button.setEnabled(False)
+        self.view_code_button.clicked.connect(self.show_script_code)
+        self.view_code_button.setStyleSheet("""
+            QPushButton {
+                background-color: #FF9800;
+                color: white;
+                padding: 8px;
+                font-weight: bold;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover:enabled {
+                background-color: #F57C00;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        buttons_layout.addWidget(self.view_code_button)
 
         right_layout.addLayout(buttons_layout)
 
@@ -443,21 +514,32 @@ class MainWindow(QMainWindow):
         if item:
             self.current_category = item.text()
             self.add_script_button.setEnabled(True)
+            self.search_input.clear()  # Pulisce la ricerca quando cambi categoria
             self.update_scripts_list()
+    
+    def on_search_changed(self):
+        """Filtra gli script in base alla ricerca"""
+        self.update_scripts_list()
 
     def update_scripts_list(self):
-        """Aggiorna la lista degli script in base alla categoria selezionata"""
+        """Aggiorna la lista degli script in base alla categoria selezionata e al filtro di ricerca"""
         self.scripts_list.clear()
         self.output_text.clear()
         self.script_name_label.setText("Seleziona uno script")
         self.description_label.setText("")
         self.exec_button.setEnabled(False)
         self.doc_button.setEnabled(False)
+        self.view_code_button.setEnabled(False)
         self.current_script = None
 
         if self.current_category:
             scripts = self.repository.get_scripts_by_category(self.current_category)
+            search_text = self.search_input.text().lower()
+            
             for script in scripts:
+                # Filtra in base alla ricerca
+                if search_text and search_text not in script['name'].lower():
+                    continue
                 # Crea widget personalizzato per ogni script con pulsante di cancellazione
                 item = QListWidgetItem()
                 item.setData(Qt.ItemDataRole.UserRole, script)
@@ -483,7 +565,52 @@ class MainWindow(QMainWindow):
                 # Label con nome script
                 label = QLabel(script['name'])
                 layout.addWidget(label)
+                
+                # Etichetta divisione (LED/LHD) con colori pastello
+                division = script.get('division', 'LED')
+                division_label = QLabel(division)
+                if division == 'LED':
+                    bg_color = '#B3E5FC'  # Azzurro pastello
+                    text_color = '#01579B'  # Blu scuro
+                else:  # LHD
+                    bg_color = '#C8E6C9'  # Verde pastello
+                    text_color = '#1B5E20'  # Verde scuro
+                
+                division_label.setStyleSheet(f"""
+                    QLabel {{
+                        background-color: {bg_color};
+                        color: {text_color};
+                        border-radius: 8px;
+                        padding: 2px 10px;
+                        font-size: 8pt;
+                        font-weight: bold;
+                    }}
+                """)
+                layout.addWidget(division_label)
                 layout.addStretch()
+                
+                # Pulsante modifica
+                edit_btn = QPushButton("✎")
+                edit_btn.setFixedSize(22, 22)
+                edit_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        color: #666;
+                        border: 1px solid #ccc;
+                        border-radius: 3px;
+                        font-size: 12pt;
+                        font-weight: bold;
+                        padding: 0px;
+                        margin: 0px;
+                    }
+                    QPushButton:hover {
+                        background-color: #2196F3;
+                        color: white;
+                        border: 1px solid #2196F3;
+                    }
+                """)
+                edit_btn.clicked.connect(lambda checked, s=script: self.on_edit_script_clicked(s))
+                layout.addWidget(edit_btn)
                 
                 # Pulsante cancella minimal e professionale
                 delete_btn = QPushButton("×")
@@ -521,10 +648,14 @@ class MainWindow(QMainWindow):
         item = self.scripts_list.currentItem()
         if item:
             self.current_script = item.data(Qt.ItemDataRole.UserRole)
-            self.script_name_label.setText(f"🔧 {self.current_script['name']}")
+            # Mostra il nome del file con estensione invece del nome dello script
+            script_path = self.current_script.get('path', '')
+            filename = script_path.split('/')[-1] if '/' in script_path else script_path
+            self.script_name_label.setText(f"📄 {filename}")
             self.description_label.setText(self.current_script['description'])
             self.exec_button.setEnabled(True)
             self.doc_button.setEnabled(True)
+            self.view_code_button.setEnabled(True)
             self.output_text.clear()
 
     def execute_script(self):
@@ -649,6 +780,7 @@ class MainWindow(QMainWindow):
         self.description_label.setText("")
         self.exec_button.setEnabled(False)
         self.doc_button.setEnabled(False)
+        self.view_code_button.setEnabled(False)
         self.current_script = None
         self.current_category = None
         
@@ -680,6 +812,33 @@ class MainWindow(QMainWindow):
 
         dialog = DocumentationViewer(self.current_script['name'], str(doc_path), self)
         dialog.exec()
+    
+    def show_script_code(self):
+        """Mostra il contenuto del file di script selezionato"""
+        if not self.current_script:
+            return
+        
+        from pathlib import Path
+        
+        # Costruisci il percorso del file script
+        script_path = self.current_script.get('path', '')
+        script_file_path = Path(self.config.scripts_dir) / script_path
+        
+        if not script_file_path.exists():
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setWindowTitle("Errore")
+            msg_box.setText(f"File script non trovato: {script_file_path}")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            self._style_messagebox(msg_box)
+            msg_box.exec()
+            return
+        
+        # Apri il dialog per visualizzare il codice
+        filename = script_path.split('/')[-1] if '/' in script_path else script_path
+        dialog = ScriptCodeViewer(filename, str(script_file_path), self)
+        dialog.exec()
+    
     def on_add_module_clicked(self):
         """Apre il dialog per aggiungere un nuovo modulo"""
         # Overlay scuro per mettere in risalto il dialog
@@ -711,7 +870,13 @@ class MainWindow(QMainWindow):
     def on_add_script_clicked(self):
         """Apre il dialog per aggiungere un nuovo script"""
         if not self.current_category:
-            QMessageBox.warning(self, "Avviso", "Seleziona prima una categoria!")
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setWindowTitle("Avviso")
+            msg_box.setText("Seleziona prima una categoria!")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            self._style_messagebox(msg_box)
+            msg_box.exec()
             return
         
         # Overlay scuro
@@ -749,37 +914,40 @@ class MainWindow(QMainWindow):
         msg_box.setIcon(QMessageBox.Icon.Question)
         msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         msg_box.setDefaultButton(QMessageBox.StandardButton.No)
-        
-        # Applica stile professionale: sfondo bianco, testi neri
-        msg_box.setStyleSheet("""
-            QMessageBox {
-                background-color: white;
-            }
-            QMessageBox QLabel {
-                color: black;
-                background-color: white;
-            }
-            QPushButton {
-                background-color: #f0f0f0;
-                color: black;
-                border: 1px solid #ccc;
-                border-radius: 4px;
-                padding: 6px 16px;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background-color: #e0e0e0;
-                border: 1px solid #999;
-            }
-            QPushButton:pressed {
-                background-color: #d0d0d0;
-            }
-        """)
+        self._style_messagebox(msg_box)
         
         reply = msg_box.exec()
         
         if reply == QMessageBox.StandardButton.Yes:
             self.delete_script(script)
+    
+    def on_edit_script_clicked(self, script):
+        """Apre il dialog per modificare uno script esistente"""
+        # Overlay scuro
+        overlay = QWidget(self)
+        overlay.setGeometry(self.rect())
+        overlay.setStyleSheet("background-color: rgba(0, 0, 0, 120);")
+        overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        overlay.show()
+        overlay.raise_()
+
+        dialog = EditScriptDialog(self, script, self.config.scripts_dir, self.current_category)
+        dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+
+        # Centra il dialog
+        dialog.adjustSize()
+        parent_center = self.frameGeometry().center()
+        dialog_rect = dialog.frameGeometry()
+        dialog_rect.moveCenter(parent_center)
+        dialog.move(dialog_rect.topLeft())
+
+        try:
+            if dialog.exec():
+                updated_script_info = dialog.get_script_info()
+                self.update_script(script, updated_script_info)
+        finally:
+            overlay.hide()
+            overlay.deleteLater()
 
     def create_script(self, script_info):
         """Crea un nuovo file di script e aggiorna index.json"""
@@ -794,7 +962,13 @@ class MainWindow(QMainWindow):
             
             # Verifica se il file esiste già
             if script_path.exists():
-                QMessageBox.warning(self, "Errore", f"Il file '{script_info['filename']}' esiste già!")
+                msg_box = QMessageBox(self)
+                msg_box.setIcon(QMessageBox.Icon.Warning)
+                msg_box.setWindowTitle("Errore")
+                msg_box.setText(f"Il file '{script_info['filename']}' esiste già!")
+                msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+                self._style_messagebox(msg_box)
+                msg_box.exec()
                 return
             
             # Crea file con contenuto fornito dall'utente o template base
@@ -835,7 +1009,8 @@ class MainWindow(QMainWindow):
                 "name": script_info['name'],
                 "description": script_info['description'],
                 "path": script_path_str,
-                "params": []
+                "params": [],
+                "division": script_info.get('division', 'LED')
             }
             
             index[self.current_category].append(new_script)
@@ -852,11 +1027,18 @@ class MainWindow(QMainWindow):
             logger.error(f"Errore nella creazione dello script: {e}", exc_info=True)
             error_msg = f"Errore nella creazione dello script:\\n{str(e)}"
             self.output_text.setText(f"[ERRORE] {error_msg}")
-            QMessageBox.critical(self, "Errore", error_msg)
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Critical)
+            msg_box.setWindowTitle("Errore")
+            msg_box.setText(error_msg)
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            self._style_messagebox(msg_box)
+            msg_box.exec()
 
     def delete_script(self, script):
-        """Cancella un file di script e aggiorna index.json"""
+        """Cancella un file di script, la sua cartella e aggiorna index.json"""
         from utils.logger import logger
+        import shutil
         
         try:
             scripts_dir = Path(self.config.scripts_dir).resolve()
@@ -866,6 +1048,13 @@ class MainWindow(QMainWindow):
             if script_path.exists():
                 script_path.unlink()
                 logger.info(f"Script file deleted: {script_path}")
+            
+            # Rimuovi la cartella dello script se esiste
+            # La cartella dovrebbe essere in scripts/{nome_script}/
+            script_folder = scripts_dir / script['name']
+            if script_folder.exists() and script_folder.is_dir():
+                shutil.rmtree(script_folder)
+                logger.info(f"Script folder deleted: {script_folder}")
             
             # Aggiorna index.json
             index_file = scripts_dir / "index.json"
@@ -891,7 +1080,89 @@ class MainWindow(QMainWindow):
             logger.error(f"Errore nella cancellazione dello script: {e}", exc_info=True)
             error_msg = f"Errore nella cancellazione dello script:\\n{str(e)}"
             self.output_text.setText(f"[ERRORE] {error_msg}")
-            QMessageBox.critical(self, "Errore", error_msg)
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Critical)
+            msg_box.setWindowTitle("Errore")
+            msg_box.setText(error_msg)
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            self._style_messagebox(msg_box)
+            msg_box.exec()
+    
+    def update_script(self, old_script, new_script_info):
+        """Aggiorna un file di script esistente e index.json"""
+        from utils.logger import logger
+        import shutil
+        
+        try:
+            scripts_dir = Path(self.config.scripts_dir).resolve()
+            category_dir = scripts_dir / self.current_category
+            
+            old_script_path = scripts_dir / old_script['path']
+            new_script_path = category_dir / new_script_info['filename']
+            
+            # Normalizza i path per il confronto
+            old_script_path = old_script_path.resolve()
+            new_script_path = new_script_path.resolve()
+            
+            # Se il nome del file è cambiato, rinomina/sposta il file
+            if old_script_path != new_script_path:
+                if new_script_path.exists():
+                    msg_box = QMessageBox(self)
+                    msg_box.setIcon(QMessageBox.Icon.Warning)
+                    msg_box.setWindowTitle("Errore")
+                    msg_box.setText(f"Il file '{new_script_info['filename']}' esiste già!")
+                    msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+                    self._style_messagebox(msg_box)
+                    msg_box.exec()
+                    return
+                
+                # Rinomina il file
+                if old_script_path.exists():
+                    old_script_path.rename(new_script_path)
+                    logger.info(f"Script file renamed: {old_script_path} -> {new_script_path}")
+            
+            # Aggiorna il contenuto del file se fornito (usa sempre new_script_path)
+            if new_script_info.get('code'):
+                new_script_path.write_text(new_script_info['code'], encoding='utf-8')
+                logger.info(f"Script content updated: {new_script_path}")
+            
+            # Aggiorna index.json
+            index_file = scripts_dir / "index.json"
+            if index_file.exists():
+                index = json.loads(index_file.read_text(encoding='utf-8'))
+                
+                # Trova e aggiorna lo script
+                if self.current_category in index:
+                    for i, s in enumerate(index[self.current_category]):
+                        if s['name'] == old_script['name']:
+                            index[self.current_category][i] = {
+                                "name": new_script_info['name'],
+                                "description": new_script_info['description'],
+                                "path": f"{self.current_category}/{new_script_info['filename']}",
+                                "params": s.get('params', []),
+                                "division": new_script_info.get('division', 'LED')
+                            }
+                            break
+                    
+                    index_file.write_text(json.dumps(index, indent=4, ensure_ascii=False), encoding='utf-8')
+                    logger.info(f"Script '{new_script_info['name']}' updated in index.json")
+            
+            self.output_text.setText(f"[OK] Script '{new_script_info['name']}' aggiornato con successo!")
+            
+            # Refresh automatico
+            QTimer.singleShot(500, self.on_refresh_clicked)
+            
+        except Exception as e:
+            logger.error(f"Errore nell'aggiornamento dello script: {e}", exc_info=True)
+            error_msg = f"Errore nell'aggiornamento dello script:\\n{str(e)}"
+            self.output_text.setText(f"[ERRORE] {error_msg}")
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Critical)
+            msg_box.setWindowTitle("Errore")
+            msg_box.setText(error_msg)
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            self._style_messagebox(msg_box)
+            msg_box.exec()
 
     def create_module(self, module_name):
         """Crea una nuova categoria di script"""
@@ -943,7 +1214,13 @@ class MainWindow(QMainWindow):
             logger.error(f"Errore nella creazione del modulo: {e}", exc_info=True)
             error_msg = f"Errore nella creazione del modulo:\n{str(e)}\n\n{traceback.format_exc()}"
             self.output_text.setText(f"[ERRORE] {error_msg}")
-            QMessageBox.critical(self, "Errore", error_msg)
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Critical)
+            msg_box.setWindowTitle("Errore")
+            msg_box.setText(error_msg)
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            self._style_messagebox(msg_box)
+            msg_box.exec()
 
 
 class AddModuleDialog(QDialog):
@@ -1039,7 +1316,37 @@ class AddModuleDialog(QDialog):
     def accept(self):
         """Valida e accetta il dialog"""
         if not self.get_module_name():
-            QMessageBox.warning(self, "Avviso", "Inserisci un nome per il modulo!")
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setWindowTitle("Avviso")
+            msg_box.setText("Inserisci un nome per il modulo!")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QMessageBox QLabel {
+                    color: black;
+                    background-color: white;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #2196F3;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 16px;
+                    min-width: 80px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #1976D2;
+                }
+                QPushButton:pressed {
+                    background-color: #0D47A1;
+                }
+            """)
+            msg_box.exec()
             return
         super().accept()
 
@@ -1143,6 +1450,38 @@ class AddScriptDialog(QDialog):
         self.desc_input.setPlaceholderText("Breve descrizione dello script")
         layout.addWidget(self.desc_input)
         
+        # Divisione (LED/LHD)
+        division_label = QLabel("Divisione:")
+        layout.addWidget(division_label)
+        
+        self.division_combo = QComboBox()
+        self.division_combo.addItems(["LED", "LHD"])
+        self.division_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #f5f5f5;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                padding: 8px;
+                color: black;
+                font-size: 10pt;
+            }
+            QComboBox:focus {
+                border: 2px solid #2196F3;
+                background-color: white;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid #666;
+                margin-right: 5px;
+            }
+        """)
+        layout.addWidget(self.division_combo)
+        
         # Codice script (area grande per paste)
         code_label = QLabel("Codice Script (opzionale - puoi fare paste qui):")
         layout.addWidget(code_label)
@@ -1169,22 +1508,437 @@ class AddScriptDialog(QDialog):
             'name': self.name_input.text().strip(),
             'filename': self.filename_input.text().strip(),
             'description': self.desc_input.text().strip() or "Nessuna descrizione",
-            'code': self.code_input.toPlainText().strip()
+            'code': self.code_input.toPlainText().strip(),
+            'division': self.division_combo.currentText()
         }
 
     def accept(self):
         """Valida e accetta il dialog"""
         if not self.name_input.text().strip():
-            QMessageBox.warning(self, "Avviso", "Inserisci un nome per lo script!")
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setWindowTitle("Avviso")
+            msg_box.setText("Inserisci un nome per lo script!")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QMessageBox QLabel {
+                    color: black;
+                    background-color: white;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #2196F3;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 16px;
+                    min-width: 80px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #1976D2;
+                }
+                QPushButton:pressed {
+                    background-color: #0D47A1;
+                }
+            """)
+            msg_box.exec()
             return
         if not self.filename_input.text().strip():
-            QMessageBox.warning(self, "Avviso", "Inserisci il nome del file con estensione!")
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setWindowTitle("Avviso")
+            msg_box.setText("Inserisci il nome del file con estensione!")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QMessageBox QLabel {
+                    color: black;
+                    background-color: white;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #2196F3;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 16px;
+                    min-width: 80px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #1976D2;
+                }
+                QPushButton:pressed {
+                    background-color: #0D47A1;
+                }
+            """)
+            msg_box.exec()
             return
         
         # Valida che il filename abbia un'estensione
         filename = self.filename_input.text().strip()
         if '.' not in filename:
-            QMessageBox.warning(self, "Avviso", "Il nome file deve includere un'estensione (es: .ps1, .py, .bat)")
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setWindowTitle("Avviso")
+            msg_box.setText("Il nome file deve includere un'estensione (es: .ps1, .py, .bat)")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QMessageBox QLabel {
+                    color: black;
+                    background-color: white;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #2196F3;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 16px;
+                    min-width: 80px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #1976D2;
+                }
+                QPushButton:pressed {
+                    background-color: #0D47A1;
+                }
+            """)
+            msg_box.exec()
             return
         
         super().accept()
+
+class EditScriptDialog(QDialog):
+    """Dialog per modificare uno script esistente"""
+    def __init__(self, parent=None, script=None, scripts_dir="", category=""):
+        super().__init__(parent)
+        self.script = script
+        self.scripts_dir = scripts_dir
+        self.category = category
+        self.script_info = None
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle("Modifica Script")
+        self.setGeometry(100, 100, 750, 600)
+        
+        # Stile con sfondo bianco e testi neri
+        self.setStyleSheet("""
+            QDialog {
+                background-color: white;
+            }
+            QLabel {
+                color: black;
+                font-size: 10pt;
+                font-weight: bold;
+            }
+            QLineEdit {
+                background-color: #f5f5f5;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                padding: 8px;
+                color: black;
+                font-size: 10pt;
+            }
+            QLineEdit:focus {
+                border: 2px solid #2196F3;
+                background-color: white;
+            }
+            QTextEdit {
+                background-color: #f5f5f5;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                padding: 8px;
+                color: black;
+                font-family: 'Consolas', 'Courier New', monospace;
+                font-size: 9pt;
+            }
+            QTextEdit:focus {
+                border: 2px solid #2196F3;
+                background-color: white;
+            }
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-size: 10pt;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        layout.setSpacing(10)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Titolo
+        title_label = QLabel("MODIFICA SCRIPT")
+        title_label.setStyleSheet("font-size: 14pt; font-weight: bold; color: #2196F3;")
+        layout.addWidget(title_label)
+        
+        # Separatore
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("background-color: #cccccc;")
+        layout.addWidget(line)
+        
+        # Nome script
+        name_label = QLabel("Nome dello script:")
+        layout.addWidget(name_label)
+        
+        self.name_input = QLineEdit()
+        self.name_input.setText(self.script.get('name', ''))
+        layout.addWidget(self.name_input)
+        
+        # Nome file (con estensione)
+        filename_label = QLabel("Nome file (includi estensione):")
+        layout.addWidget(filename_label)
+        
+        self.filename_input = QLineEdit()
+        # Estrai il filename dal path
+        script_path = self.script.get('path', '')
+        filename = script_path.split('/')[-1] if '/' in script_path else script_path
+        self.filename_input.setText(filename)
+        layout.addWidget(self.filename_input)
+        
+        # Descrizione
+        desc_label = QLabel("Descrizione:")
+        layout.addWidget(desc_label)
+        
+        self.desc_input = QLineEdit()
+        self.desc_input.setText(self.script.get('description', ''))
+        layout.addWidget(self.desc_input)
+        
+        # Divisione (LED/LHD)
+        division_label = QLabel("Divisione:")
+        layout.addWidget(division_label)
+        
+        self.division_combo = QComboBox()
+        self.division_combo.addItems(["LED", "LHD"])
+        current_division = self.script.get('division', 'LED')
+        self.division_combo.setCurrentText(current_division)
+        self.division_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #f5f5f5;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                padding: 8px;
+                color: black;
+                font-size: 10pt;
+            }
+            QComboBox:focus {
+                border: 2px solid #2196F3;
+                background-color: white;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid #666;
+                margin-right: 5px;
+            }
+        """)
+        layout.addWidget(self.division_combo)
+        
+        # Codice script
+        code_label = QLabel("Codice Script:")
+        layout.addWidget(code_label)
+        
+        self.code_input = QTextEdit()
+        # Carica il contenuto del file esistente
+        try:
+            from pathlib import Path
+            script_file_path = Path(self.scripts_dir) / script_path
+            if script_file_path.exists():
+                self.code_input.setPlainText(script_file_path.read_text(encoding='utf-8'))
+        except Exception:
+            pass
+        self.code_input.setMinimumHeight(250)
+        layout.addWidget(self.code_input)
+        
+        # Buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | 
+            QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        
+        self.setLayout(layout)
+
+    def get_script_info(self):
+        """Ritorna le informazioni dello script aggiornate"""
+        return {
+            'name': self.name_input.text().strip(),
+            'filename': self.filename_input.text().strip(),
+            'description': self.desc_input.text().strip() or "Nessuna descrizione",
+            'code': self.code_input.toPlainText().strip(),
+            'division': self.division_combo.currentText()
+        }
+
+    def accept(self):
+        """Valida e accetta il dialog"""
+        if not self.name_input.text().strip():
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setWindowTitle("Avviso")
+            msg_box.setText("Inserisci un nome per lo script!")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QMessageBox QLabel {
+                    color: black;
+                    background-color: white;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #2196F3;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 16px;
+                    min-width: 80px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #1976D2;
+                }
+                QPushButton:pressed {
+                    background-color: #0D47A1;
+                }
+            """)
+            msg_box.exec()
+            return
+        if not self.filename_input.text().strip():
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setWindowTitle("Avviso")
+            msg_box.setText("Inserisci il nome del file con estensione!")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QMessageBox QLabel {
+                    color: black;
+                    background-color: white;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #2196F3;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 16px;
+                    min-width: 80px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #1976D2;
+                }
+                QPushButton:pressed {
+                    background-color: #0D47A1;
+                }
+            """)
+            msg_box.exec()
+            return
+        
+        # Valida che il filename abbia un'estensione
+        filename = self.filename_input.text().strip()
+        if '.' not in filename:
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setWindowTitle("Avviso")
+            msg_box.setText("Il nome file deve includere un'estensione (es: .ps1, .py, .bat)")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QMessageBox QLabel {
+                    color: black;
+                    background-color: white;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #2196F3;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 16px;
+                    min-width: 80px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #1976D2;
+                }
+                QPushButton:pressed {
+                    background-color: #0D47A1;
+                }
+            """)
+            msg_box.exec()
+            return
+        
+        super().accept()
+
+
+class ScriptCodeViewer(QDialog):
+    """Dialog per visualizzare il codice di uno script"""
+    def __init__(self, title, script_path, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Codice Script - {title}")
+        self.setGeometry(100, 100, 900, 600)
+
+        layout = QVBoxLayout()
+        
+        # Leggi e visualizza il file di script
+        code_text = QTextEdit()
+        code_text.setReadOnly(True)
+        code_text.setFont(QFont("Consolas", 10))
+        code_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #1E1E1E;
+                color: #D4D4D4;
+                border: 1px solid #333;
+                padding: 10px;
+            }
+        """)
+        
+        if os.path.exists(script_path):
+            try:
+                with open(script_path, 'r', encoding='utf-8') as f:
+                    code_text.setPlainText(f.read())
+            except Exception as e:
+                code_text.setText(f"Errore nella lettura del file: {str(e)}")
+        else:
+            code_text.setText(f"File non trovato: {script_path}")
+
+        layout.addWidget(code_text)
+
+        # Bottone chiudi
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.setLayout(layout)

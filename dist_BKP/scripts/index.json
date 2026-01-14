@@ -1,0 +1,48 @@
+{
+    "dispatcher": [
+        {
+            "name": "Restart_Dispatcher",
+            "description": "Nessuna descrizione",
+            "path": "dispatcher/restart_dispatcher.ps1",
+            "params": []
+        },
+        {
+            "name": "Start_Dispatcher",
+            "description": "Nessuna descrizione",
+            "path": "dispatcher/start_dispatcher.ps1",
+            "params": []
+        },
+        {
+            "name": "Stop_Dispatcher",
+            "description": "Nessuna descrizione",
+            "path": "dispatcher/stop_dispatcher.ps1",
+            "params": []
+        },
+        {
+            "name": "Stop_Indexer_and_Dispatcher",
+            "description": "Nessuna descrizione",
+            "path": "dispatcher/stop_indexer_and_dispatcher.bat",
+            "params": []
+        }
+    ],
+    "indexer": [
+        {
+            "name": "Start_FTS_Indexer_SOLR",
+            "description": "Nessuna descrizione",
+            "path": "indexer/start_fts_indexer_solr.bat",
+            "params": []
+        },
+        {
+            "name": "Restart_FTS_Indexer",
+            "description": "Nessuna descrizione",
+            "path": "indexer/restart_fts_indexer.bat",
+            "params": []
+        },
+        {
+            "name": "Stop_Indexer_and_Dispatcher",
+            "description": "Nessuna descrizione",
+            "path": "indexer/stop_indexer_and_dispatcher.bat",
+            "params": []
+        }
+    ]
+}
