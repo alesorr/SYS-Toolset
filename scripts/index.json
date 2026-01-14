@@ -1,5 +1,5 @@
 {
-    "Dispatcher": [
+    "dispatcher": [
         {
             "name": "RestartDispatcher",
             "description": "Riavvia il servizio Dispatcher",
@@ -7,7 +7,7 @@
             "params": ["-Force", "-Verbose"]
         }
     ],
-    "Indexer": [
+    "indexer": [
         {
             "name": "ReindexData",
             "description": "Rindicizza tutti i dati",
@@ -15,7 +15,7 @@
             "params": ["-Full"]
         }
     ],
-    "RoboTC": [
+    "roboTC": [
         {
             "name": "Extract Organization Information",
             "description": "Estrae le informazioni utente dall'organizzazione",

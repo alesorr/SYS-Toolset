@@ -1,0 +1,340 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                                                                           ║
+║             SYSTEM TOOLSET - TRASFORMAZIONE CLI → GUI → EXE             ║
+║                                                                           ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 📊 ARCHITETTURA DELLA SOLUZIONE                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+    FASE 1: CLI Tradizionale          FASE 2: GUI Moderna          FASE 3: EXE Standalone
+    ════════════════════════          ═══════════════════          ══════════════════════
+    
+    $ python main.py                  $ python app.py              $ SystemToolset.exe
+           ↓                                  ↓                            ↓
+    Menu testuale                     Interfaccia PyQt6            Exe compilato
+    (Rich console)                    (Grafica moderna)            (No dipendenze)
+           ↓                                  ↓                            ↓
+    Esecuzione                        Config centralizzato          Distribuzione facile
+    sequenziale                       (config.ini)                 (USB, cloud, rete)
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 🎯 COSA CAMBIA RISPETTO ALLA VERSIONE PRECEDENTE                       │
+└─────────────────────────────────────────────────────────────────────────┘
+
+    ┌──────────────────┬─────────────────────┬──────────────────────┐
+    │ ASPETTO          │ CLI (main.py)       │ GUI (app.py)         │
+    ├──────────────────┼─────────────────────┼──────────────────────┤
+    │ Framework        │ Rich console        │ PyQt6 (grafica)      │
+    │ Interfaccia      │ Menu testuale       │ Interfaccia grafica  │
+    │ Documentazione   │ File MD separati    │ Viewer integrato     │
+    │ Config           │ Hardcoded           │ config.ini           │
+    │ Esecuzione       │ Sincrona (blocca)   │ Async (non blocca)   │
+    │ Distribuzione    │ Solo Python         │ EXE standalone       │
+    │ Dipendenze       │ Python 3.8+         │ Nessuna (incluse)    │
+    └──────────────────┴─────────────────────┴──────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 🔧 CONFIGURAZIONE CENTRALIZZATA - config.ini                           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+    Localizzazione:
+    ───────────────
+    • Per Python:  config/config.ini (nella root)
+    • Per EXE:     config/config.ini (accanto all'exe)
+    
+    Contenuto:
+    ─────────
+    [PATHS]
+    scripts_directory = scripts     ← Dove trovare gli script
+    docs_directory = docs           ← Dove trovare la documentazione
+    logs_directory = logs           ← Dove salvare i log
+    
+    [APP]
+    title = System Toolset - GUI Interface
+    version = 1.0.0
+    window_width = 1200
+    window_height = 700
+    debug = false
+    
+    [UI]
+    theme = light
+    font_family = Arial
+    font_size = 10
+    
+    Accesso dalla code:
+    ──────────────────
+    from config.config import ConfigManager
+    config = ConfigManager()
+    
+    scripts = config.scripts_dir    # Path object
+    docs = config.docs_dir          # Path object
+    title = config.app_title        # string
+    debug = config.debug            # bool
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 📦 COME CREARE L'EXE                                                    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+    STEP 1: Installa dipendenze (una volta)
+    ───────────────────────────────────────
+    $ pip install -r requirements.txt
+    
+    
+    STEP 2: Compila l'eseguibile
+    ────────────────────────────
+    $ .\build.ps1              # Build standard (directory)
+    $ .\build.ps1 -OneFile     # Build singolo file
+    $ .\build.ps1 -Clean       # Pulisci e ricompila
+    $ .\build.ps1 -Console     # Mostra console per debug
+    
+    
+    STEP 3: Usa l'EXE
+    ────────────────
+    $ dist\SystemToolset\SystemToolset.exe
+    
+    
+    Struttura dopo il build:
+    ────────────────────────
+    dist/SystemToolset/
+    ├── SystemToolset.exe          ← Eseguibile (doppio click!)
+    ├── config/
+    │   └── config.ini             ← VITALE per configurazione
+    ├── scripts/                   ← Tutti gli script
+    ├── docs/                      ← Tutta la documentazione
+    └── PyQt6/                     ← Librerie (auto-incluso)
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 📋 FILE PRINCIPALI DELLA SOLUZIONE                                      │
+└─────────────────────────────────────────────────────────────────────────┘
+
+    src/app.py
+    ──────────
+    Entry point universale che funziona sia da Python che da EXE.
+    Gestisce automaticamente i percorsi e carica la GUI.
+    → Usa questo come entry point principale!
+    
+    
+    src/config/config.py
+    ───────────────────
+    ConfigManager (singleton) che gestisce la configurazione.
+    Legge config.ini e fornisce accesso centralizzato ai settings.
+    Supporta percorsi relativi/assoluti automaticamente.
+    
+    
+    config/config.ini
+    ─────────────────
+    File configurazione centralizzato.
+    Modificabile senza riconiare il codice.
+    Cerca automaticamente la posizione giusta (accanto app o in root).
+    
+    
+    src/gui/main_window.py
+    ─────────────────────
+    Interfaccia principale PyQt6.
+    Include ScriptExecutorThread (esecuzione non-blocking).
+    Include DocumentationViewer (viewer markdown integrato).
+    
+    
+    build.ps1
+    ────────
+    Script PowerShell per compilare l'EXE con PyInstaller.
+    Gestisce automaticamente le dipendenze.
+    Diverse opzioni di compilazione disponibili.
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 📚 DOCUMENTAZIONE DISPONIBILE                                           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+    README.md
+    ─────────
+    Guida completa con:
+    • Panoramica della trasformazione
+    • Architettura della soluzione
+    • Come avviare l'app (Python + EXE)
+    • Configurazione centralizzata
+    • Troubleshooting
+    • FAQ
+    
+    
+    BUILD_EXE.md
+    ────────────
+    Guida dettagliata per compilare l'EXE con:
+    • Prerequisiti
+    • Step-by-step
+    • Opzioni PyInstaller
+    • Distribuzione
+    • Troubleshooting specifico
+    
+    
+    QUICK_START_EXE.md
+    ──────────────────
+    Quick reference (questo file):
+    • Comando rapido
+    • Cosa cambia tra versioni
+    • File di configurazione
+    • Checklist pre-rilascio
+    • Troubleshooting quick
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 🚀 COME AVVIARE L'APP - 3 OPZIONI                                       │
+└─────────────────────────────────────────────────────────────────────────┘
+
+    OPZIONE 1: CLI Tradizionale (Legacy)
+    ────────────────────────────────────
+    $ python src/main.py
+    
+    → Menu testuale con Rich
+    → Richiede Python installato
+    → Perfetto per server/headless
+    
+    
+    OPZIONE 2: GUI Python (CONSIGLIATO IN SVILUPPO)
+    ───────────────────────────────────────────────
+    $ python src/app.py
+    
+    → Interfaccia grafica PyQt6
+    → Config centralizzato in config.ini
+    → Perfetto per development
+    → Richiede Python installato
+    
+    
+    OPZIONE 3: EXE Standalone (CONSIGLIATO IN PRODUZIONE)
+    ─────────────────────────────────────────────────────
+    $ dist\SystemToolset\SystemToolset.exe
+    
+    → Eseguibile completo e standalone
+    → Nessun Python richiesto
+    → Distribuzione facile
+    → Config in config.ini accanto all'exe
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ✅ CHECKLIST PRE-RILASCIO                                               │
+└─────────────────────────────────────────────────────────────────────────┘
+
+    □ pip install -r requirements.txt
+    □ .\build.ps1 -Clean
+    □ Verifica che dist\SystemToolset\config\config.ini esista
+    □ Verifica che dist\SystemToolset\scripts\ abbia i file
+    □ Verifica che dist\SystemToolset\docs\ abbia le documentazioni
+    □ Prova l'exe: dist\SystemToolset\SystemToolset.exe
+    □ Testa l'esecuzione di uno script
+    □ Testa la visualizzazione della documentazione
+    □ Copia tutta la cartella dist\SystemToolset\ al server
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 🔄 PERCORSI RELATIVI - COME FUNZIONA                                    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+    Quando esegui l'app (Python o EXE), i percorsi in config.ini
+    sono RELATIVI alla cartella dell'applicazione.
+    
+    
+    ESEMPIO 1: Python da root
+    ─────────────────────────
+    C:\dev\SYS-Toolset\
+    ├── src/app.py
+    ├── config/config.ini
+    └── scripts/
+    
+    config.ini contiene:
+    scripts_directory = scripts
+    
+    → Cerca gli script in: C:\dev\SYS-Toolset\scripts\
+    
+    
+    ESEMPIO 2: EXE in Program Files
+    ───────────────────────────────
+    C:\Program Files\SystemToolset\
+    ├── SystemToolset.exe
+    ├── config/config.ini
+    └── scripts/
+    
+    config.ini contiene:
+    scripts_directory = scripts
+    
+    → Cerca gli script in: C:\Program Files\SystemToolset\scripts\
+    
+    
+    VANTAGGI:
+    • L'app funziona ovunque si trovi
+    • Basta copiare la cartella intera
+    • Nessun hardcoding dei percorsi
+    • Perfetto per distribuzione portatile
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 🎁 DISTRIBUZIONE DELL'EXE                                               │
+└─────────────────────────────────────────────────────────────────────────┘
+
+    OPZIONE 1: USB / Cartella Portatile
+    ───────────────────────────────────
+    1. Compila con .\build.ps1
+    2. Copia intera cartella dist\SystemToolset\ su USB
+    3. L'utente estrae e doppio-click su SystemToolset.exe
+    4. Funziona! Nessuna installazione.
+    
+    
+    OPZIONE 2: Network Share
+    ───────────────────────
+    1. Copia dist\SystemToolset\ su \\server\apps\SystemToolset
+    2. Utenti creano collegamento a \\server\apps\SystemToolset\SystemToolset.exe
+    3. Facile da aggiornare (update sul server)
+    
+    
+    OPZIONE 3: Installer (.msi / .exe)
+    ──────────────────────────────────
+    1. Usa Inno Setup o NSIS
+    2. Crea installer che copia dist\SystemToolset\ in Program Files
+    3. Crea Start Menu shortcut
+    4. Installazione professionale
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ⚠️  PROBLEMI COMUNI E SOLUZIONI                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+    PROBLEMA                          SOLUZIONE
+    ───────────────────────────────────────────────────────────────────
+    "config.ini not found"        → Verifica che sia nella cartella dell'exe
+                                    o in config/ accanto all'exe
+    
+    "scripts directory not found" → Verifica che scripts/ sia accanto all'exe
+                                    o controllaConfig.ini
+    
+    L'exe non si avvia            → Ricompila con .\build.ps1 -Clean -Console
+                                    per vedere gli errori
+    
+    "No module named PyQt6"       → pip install PyQt6 --upgrade
+    
+    L'exe è lento                 → Ricompila senza -OneFile
+                                    usa versione directory (più veloce)
+    
+    Documentazione non si mostra  → Verifica che docs/ sia nella cartella
+
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                                                                           ║
+║                     🎉 SOLUZIONE COMPLETA! 🎉                           ║
+║                                                                           ║
+║  Hai trasformato un'app CLI in una GUI moderna e distribuibile           ║
+║  Come EXE standalone con configurazione centralizzata!                  ║
+║                                                                           ║
+║  Prossimi step:                                                          ║
+║  1. pip install -r requirements.txt                                     ║
+║  2. .\build.ps1                                                         ║
+║  3. dist\SystemToolset\SystemToolset.exe                                ║
+║                                                                           ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+Data: 2026-01-12
+Versione: 1.0.0

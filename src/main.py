@@ -20,7 +20,7 @@ from menu.tool_menu import ToolMenu
 from db.script_repository import ScriptRepository
 
 def main():
-    repo = ScriptRepository()
+    repo = ScriptRepository(base_path="scripts")
     menu = ToolMenu(repo)
     menu.start()
 

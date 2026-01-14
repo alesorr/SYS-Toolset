@@ -1,7 +1,10 @@
 # Utility libraries
 colorama
 rich
-
+# GUI Framework
+PyQt6>=6.0.0
+# Build & Packaging
+PyInstaller>=6.0.0
 # Development & Testing
 pytest
 pytest-cov
