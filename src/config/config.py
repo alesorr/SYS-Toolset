@@ -77,7 +77,7 @@ class ConfigManager:
             'logs_directory': 'logs',
         }
         self._config['APP'] = {
-            'title': 'System Toolset - GUI Interface',
+            'title': 'SYS Toolset Management Console',
             'version': '1.0.0',
             'window_width': '1200',
             'window_height': '700',
@@ -178,7 +178,7 @@ class ConfigManager:
     @property
     def app_title(self):
         """Titolo dell'applicazione"""
-        return self.get('APP', 'title', 'System Toolset - GUI Interface')
+        return self.get('APP', 'title', 'SYS Toolset Management')
     
     @property
     def app_version(self):

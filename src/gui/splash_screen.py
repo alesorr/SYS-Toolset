@@ -34,7 +34,7 @@ class SplashScreen(QSplashScreen):
         layout.setSpacing(20)
         
         # Titolo applicazione
-        title_label = QLabel("System Toolset")
+        title_label = QLabel("SYS Toolset Management Console")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_font = QFont("Segoe UI", 24, QFont.Weight.Bold)
         title_label.setFont(title_font)

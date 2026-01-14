@@ -34,9 +34,10 @@ class ScriptExecutorThread(QThread):
     error_signal = pyqtSignal(str)
     finished_signal = pyqtSignal()
 
-    def __init__(self, script_path):
+    def __init__(self, script_path, log_file_path=None):
         super().__init__()
         self.script_path = script_path
+        self.log_file_path = log_file_path
 
     def run(self):
         try:
@@ -71,13 +72,30 @@ class ScriptExecutorThread(QThread):
 
             if result.stdout:
                 self.output_signal.emit(result.stdout)
+                if self.log_file_path:
+                    self._write_to_log(result.stdout)
             if result.stderr:
                 self.error_signal.emit(result.stderr)
+                if self.log_file_path:
+                    self._write_to_log(f"[ERRORE] {result.stderr}")
 
         except Exception as e:
-            self.error_signal.emit(f"Errore nell'esecuzione dello script: {str(e)}")
+            error_msg = f"Errore nell'esecuzione dello script: {str(e)}"
+            self.error_signal.emit(error_msg)
+            if self.log_file_path:
+                self._write_to_log(f"[ERRORE] {error_msg}")
         finally:
             self.finished_signal.emit()
+    
+    def _write_to_log(self, text):
+        """Scrive l'output nel file di log specifico"""
+        try:
+            with open(self.log_file_path, 'a', encoding='utf-8') as f:
+                f.write(text)
+                if not text.endswith('\n'):
+                    f.write('\n')
+        except Exception as e:
+            print(f"Errore scrittura log: {e}")
 
 
 class RefreshThread(QThread):
@@ -671,21 +689,39 @@ class MainWindow(QMainWindow):
         script_name = self.current_script['name']
         script_path = self.current_script['path']
         
-        # Log esecuzione script in logs/script_executions.log
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Crea un file di log specifico per questa esecuzione
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         log_dir = self.config.logs_dir
         log_dir.mkdir(parents=True, exist_ok=True)
         
-        execution_log_file = log_dir / "script_executions.log"
+        # Nome file: timestamp_nomemodulo.log
+        module_name_clean = module_name.replace(" ", "_").replace("/", "_")
+        script_log_file = log_dir / f"{timestamp}_{module_name_clean}.log"
+        
+        # Scrivi intestazione nel log specifico
         try:
-            with open(execution_log_file, 'a', encoding='utf-8') as f:
-                f.write(f"[{timestamp}] MODULO: {module_name} | SCRIPT: {script_name} | PATH: {script_path}\n")
-            logger.info(f"Execution logged to {execution_log_file}: Module='{module_name}', Script='{script_name}'")
+            with open(script_log_file, 'w', encoding='utf-8') as f:
+                f.write(f"========================================\n")
+                f.write(f"Esecuzione Script\n")
+                f.write(f"========================================\n")
+                f.write(f"Data/Ora: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"Modulo: {module_name}\n")
+                f.write(f"Script: {script_name}\n")
+                f.write(f"Path: {script_path}\n")
+                f.write(f"========================================\n\n")
+            logger.info(f"Log file creato: {script_log_file}")
         except Exception as e:
-            logger.error(f"Failed to write execution log: {e}")
+            logger.error(f"Errore creazione log file: {e}")
+            script_log_file = None
+        
+        # Salva il riferimento al log file per usarlo nei metodi append
+        self.current_script_log = script_log_file
 
         self.output_text.clear()
-        self.output_text.setText(f"⏳ Esecuzione in corso: {self.current_script['name']}...\n")
+        initial_msg = f"⏳ Esecuzione in corso: {self.current_script['name']}...\n"
+        self.output_text.setText(initial_msg)
+        if script_log_file:
+            self._write_to_current_log(initial_msg)
         self.exec_button.setEnabled(False)
 
         # Costruisce il path dello script
@@ -719,24 +755,47 @@ class MainWindow(QMainWindow):
             return
         
         logger.info(f"Executing: {script_path}")
-        self.executor_thread = ScriptExecutorThread(script_path)
+        self.executor_thread = ScriptExecutorThread(script_path, str(script_log_file) if script_log_file else None)
         self.executor_thread.output_signal.connect(self.append_output)
         self.executor_thread.error_signal.connect(self.append_error)
         self.executor_thread.finished_signal.connect(self.on_execution_finished)
         self.executor_thread.start()
 
     def append_output(self, text):
-        """Aggiunge output al text area"""
+        """Aggiunge output al text area e al log file"""
         self.output_text.append(text)
+        if hasattr(self, 'current_script_log') and self.current_script_log:
+            self._write_to_current_log(text)
 
     def append_error(self, text):
-        """Aggiunge errore al text area con styling"""
-        self.output_text.append(f"[ERRORE] {text}")
+        """Aggiunge errore al text area con styling e al log file"""
+        error_msg = f"[ERRORE] {text}"
+        self.output_text.append(error_msg)
+        if hasattr(self, 'current_script_log') and self.current_script_log:
+            self._write_to_current_log(error_msg)
 
     def on_execution_finished(self):
         """Gestisce la fine dell'esecuzione dello script"""
-        self.output_text.append("\n[OK] Esecuzione completata")
+        completion_msg = "\n[OK] Esecuzione completata"
+        self.output_text.append(completion_msg)
+        if hasattr(self, 'current_script_log') and self.current_script_log:
+            self._write_to_current_log(completion_msg)
+            self._write_to_current_log(f"\n{'='*40}\n")
+            self.current_script_log = None
         self.exec_button.setEnabled(True)
+    
+    def _write_to_current_log(self, text):
+        """Scrive nel file di log corrente dell'esecuzione"""
+        if not hasattr(self, 'current_script_log') or not self.current_script_log:
+            return
+        try:
+            with open(self.current_script_log, 'a', encoding='utf-8') as f:
+                f.write(text)
+                if not text.endswith('\n'):
+                    f.write('\n')
+        except Exception as e:
+            from utils.logger import logger
+            logger.error(f"Errore scrittura log: {e}")
 
     def on_refresh_clicked(self):
         """Gestisce il click sul bottone refresh"""

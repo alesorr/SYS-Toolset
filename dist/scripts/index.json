@@ -1,51 +1,51 @@
 {
     "dispatcher": [
         {
-            "name": "Restart_Dispatcher",
-            "description": "Nessuna descrizione",
-            "path": "dispatcher/restart_dispatcher.ps1",
-            "params": [],
-            "division": "LHD"
+            "name": "RestartDispatcher",
+            "description": "Riavvia il servizio Dispatcher",
+            "path": "dispatcher/restart_dispatcher",
+            "params": [
+                "-Force",
+                "-Verbose"
+            ]
         },
         {
-            "name": "Start_Dispatcher",
-            "description": "Nessuna descrizione",
-            "path": "dispatcher/start_dispatcher.ps1",
-            "params": [],
-            "division": "LHD"
-        },
-        {
-            "name": "Stop_Dispatcher",
-            "description": "Nessuna descrizione",
-            "path": "dispatcher/stop_dispatcher.ps1",
-            "params": []
-        },
-        {
-            "name": "Stop_Indexer_and_Dispatcher",
-            "description": "Nessuna descrizione",
-            "path": "dispatcher/stop_indexer_and_dispatcher.bat",
+            "name": "test",
+            "description": "test",
+            "path": "dispatcher/test.ps1",
             "params": []
         }
     ],
     "indexer": [
         {
-            "name": "Start_FTS_Indexer_SOLR",
-            "description": "Nessuna descrizione",
-            "path": "indexer/start_fts_indexer_solr.bat",
-            "params": []
-        },
-        {
-            "name": "Restart_FTS_Indexer",
-            "description": "Nessuna descrizione",
-            "path": "indexer/restart_fts_indexer.bat",
-            "params": []
-        },
-        {
-            "name": "Stop_Indexer_and_Dispatcher",
-            "description": "Nessuna descrizione",
-            "path": "indexer/stop_indexer_and_dispatcher.bat",
-            "params": []
+            "name": "ReindexData",
+            "description": "Rindicizza tutti i dati",
+            "path": "indexer/reindex",
+            "params": [
+                "-Full"
+            ]
         }
     ],
-    "visualizzatore": []
+    "robotc": [
+        {
+            "name": "Extract Organization Information",
+            "description": "Estrae le informazioni utente dall'organizzazione",
+            "path": "RoboTC/RunMe_ExtractOrganizationInformation",
+            "params": [
+                "-Full"
+            ]
+        },
+        {
+            "name": "User Manegement",
+            "description": "Aggiorna/Crea/Rimuovi properties utente",
+            "path": "RoboTC/RunMe_UserManager",
+            "params": [
+                "-Full"
+            ]
+        }
+    ],
+    "dataview": [],
+    "visualizator": [],
+    "test": [],
+    "Test": []
 }
