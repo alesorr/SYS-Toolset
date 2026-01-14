@@ -34,50 +34,78 @@ class ScriptExecutorThread(QThread):
     error_signal = pyqtSignal(str)
     finished_signal = pyqtSignal()
 
-    def __init__(self, script_path, log_file_path=None):
+    def __init__(self, script_path, log_file_path=None, params=None):
         super().__init__()
         self.script_path = script_path
         self.log_file_path = log_file_path
+        self.params = params or []
+        self.process = None
+        self._stop_requested = False
 
     def run(self):
         try:
             # Opzioni per nascondere la finestra della console
             startupinfo = None
+            creationflags = 0
             if os.name == 'nt':  # Windows
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                 startupinfo.wShowWindow = subprocess.SW_HIDE
+                creationflags = subprocess.CREATE_NO_WINDOW
             
+            # Costruisci il comando base
             if self.script_path.endswith(".ps1"):
-                result = subprocess.run(
-                    ["powershell", "-ExecutionPolicy", "Bypass", "-NoProfile", "-File", self.script_path],
-                    capture_output=True, text=True, startupinfo=startupinfo, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-                )
+                cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-NoProfile", "-File", self.script_path] + self.params
             elif self.script_path.endswith(".bat") or self.script_path.endswith(".cmd"):
-                result = subprocess.run(
-                    self.script_path, 
-                    capture_output=True, text=True, shell=True, 
-                    startupinfo=startupinfo, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-                )
+                cmd = [self.script_path] + self.params
             elif self.script_path.endswith(".py"):
-                result = subprocess.run(
-                    ["python", self.script_path], 
-                    capture_output=True, text=True,
-                    startupinfo=startupinfo, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-                )
+                # Aggiungi -u per output unbuffered in Python
+                cmd = ["python", "-u", self.script_path] + self.params
             else:
                 self.error_signal.emit(f"Tipo di script non supportato: {self.script_path}")
                 self.finished_signal.emit()
                 return
 
-            if result.stdout:
-                self.output_signal.emit(result.stdout)
+            # Usa Popen per poter terminare il processo
+            self.process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,  # Line buffered per output real-time
+                startupinfo=startupinfo,
+                creationflags=creationflags
+            )
+            
+            # Leggi output in tempo reale
+            while True:
+                if self._stop_requested:
+                    self.process.terminate()
+                    try:
+                        self.process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        self.process.kill()
+                    self.error_signal.emit("\n[INTERRUZIONE] Esecuzione interrotta dall'utente")
+                    break
+                
+                output = self.process.stdout.readline()
+                if output:
+                    self.output_signal.emit(output.rstrip())
+                    if self.log_file_path:
+                        self._write_to_log(output.rstrip())
+                elif self.process.poll() is not None:
+                    break
+            
+            # Leggi eventuali output rimanenti
+            remaining_out, remaining_err = self.process.communicate()
+            if remaining_out:
+                self.output_signal.emit(remaining_out)
                 if self.log_file_path:
-                    self._write_to_log(result.stdout)
-            if result.stderr:
-                self.error_signal.emit(result.stderr)
+                    self._write_to_log(remaining_out)
+            if remaining_err:
+                self.error_signal.emit(remaining_err)
                 if self.log_file_path:
-                    self._write_to_log(f"[ERRORE] {result.stderr}")
+                    self._write_to_log(f"[ERRORE] {remaining_err}")
 
         except Exception as e:
             error_msg = f"Errore nell'esecuzione dello script: {str(e)}"
@@ -85,7 +113,12 @@ class ScriptExecutorThread(QThread):
             if self.log_file_path:
                 self._write_to_log(f"[ERRORE] {error_msg}")
         finally:
+            self.process = None
             self.finished_signal.emit()
+    
+    def stop(self):
+        """Richiede l'interruzione dell'esecuzione"""
+        self._stop_requested = True
     
     def _write_to_log(self, text):
         """Scrive l'output nel file di log specifico"""
@@ -377,6 +410,28 @@ class MainWindow(QMainWindow):
             }
         """)
         buttons_layout.addWidget(self.exec_button)
+        
+        self.stop_button = QPushButton("⬛ Stop")
+        self.stop_button.setEnabled(False)
+        self.stop_button.clicked.connect(self.stop_execution)
+        self.stop_button.setStyleSheet("""
+            QPushButton {
+                background-color: #F44336;
+                color: white;
+                padding: 8px;
+                font-weight: bold;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover:enabled {
+                background-color: #D32F2F;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        buttons_layout.addWidget(self.stop_button)
 
         self.doc_button = QPushButton("📖 Visualizza Documentazione")
         self.doc_button.setEnabled(False)
@@ -584,15 +639,18 @@ class MainWindow(QMainWindow):
                 label = QLabel(script['name'])
                 layout.addWidget(label)
                 
-                # Etichetta divisione (LED/LHD) con colori pastello
+                # Etichetta divisione (LED/LHD/ALL) con colori pastello
                 division = script.get('division', 'LED')
                 division_label = QLabel(division)
                 if division == 'LED':
                     bg_color = '#B3E5FC'  # Azzurro pastello
                     text_color = '#01579B'  # Blu scuro
-                else:  # LHD
+                elif division == 'LHD':
                     bg_color = '#C8E6C9'  # Verde pastello
                     text_color = '#1B5E20'  # Verde scuro
+                else:  # ALL
+                    bg_color = '#FFE082'  # Giallo/arancio pastello
+                    text_color = '#F57F17'  # Arancio scuro
                 
                 division_label.setStyleSheet(f"""
                     QLabel {{
@@ -755,11 +813,27 @@ class MainWindow(QMainWindow):
             return
         
         logger.info(f"Executing: {script_path}")
-        self.executor_thread = ScriptExecutorThread(script_path, str(script_log_file) if script_log_file else None)
+        
+        # Ottieni parametri salvati nello script (può essere stringa o lista)
+        params_raw = self.current_script.get('params', '')
+        if isinstance(params_raw, list):
+            params = params_raw
+        elif isinstance(params_raw, str):
+            params = params_raw.split() if params_raw else []
+        else:
+            params = []
+        if params:
+            logger.info(f"Parametri: {params}")
+        
+        self.executor_thread = ScriptExecutorThread(script_path, str(script_log_file) if script_log_file else None, params)
         self.executor_thread.output_signal.connect(self.append_output)
         self.executor_thread.error_signal.connect(self.append_error)
         self.executor_thread.finished_signal.connect(self.on_execution_finished)
         self.executor_thread.start()
+        
+        # Abilita stop e disabilita exec
+        self.stop_button.setEnabled(True)
+        self.exec_button.setEnabled(False)
 
     def append_output(self, text):
         """Aggiunge output al text area e al log file"""
@@ -783,6 +857,14 @@ class MainWindow(QMainWindow):
             self._write_to_current_log(f"\n{'='*40}\n")
             self.current_script_log = None
         self.exec_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+    
+    def stop_execution(self):
+        """Interrompe l'esecuzione in corso"""
+        if self.executor_thread and self.executor_thread.isRunning():
+            self.output_text.append("\n[STOP] Interruzione in corso...")
+            self.executor_thread.stop()
+            self.stop_button.setEnabled(False)
     
     def _write_to_current_log(self, text):
         """Scrive nel file di log corrente dell'esecuzione"""
@@ -876,8 +958,6 @@ class MainWindow(QMainWindow):
         """Mostra il contenuto del file di script selezionato"""
         if not self.current_script:
             return
-        
-        from pathlib import Path
         
         # Costruisci il percorso del file script
         script_path = self.current_script.get('path', '')
@@ -1156,12 +1236,23 @@ class MainWindow(QMainWindow):
             scripts_dir = Path(self.config.scripts_dir).resolve()
             category_dir = scripts_dir / self.current_category
             
-            old_script_path = scripts_dir / old_script['path']
-            new_script_path = category_dir / new_script_info['filename']
+            # Trova il file reale (potrebbe avere estensione non specificata in index.json)
+            old_script_base = scripts_dir / old_script['path']
+            old_script_path = None
+            if old_script_base.exists():
+                old_script_path = old_script_base.resolve()
+            else:
+                # Cerca con estensioni comuni
+                for ext in ['.ps1', '.bat', '.py', '.sh', '.exe']:
+                    candidate = Path(str(old_script_base) + ext)
+                    if candidate.exists():
+                        old_script_path = candidate.resolve()
+                        break
             
-            # Normalizza i path per il confronto
-            old_script_path = old_script_path.resolve()
-            new_script_path = new_script_path.resolve()
+            if not old_script_path:
+                raise FileNotFoundError(f"Script originale non trovato: {old_script['path']}")
+            
+            new_script_path = (category_dir / new_script_info['filename']).resolve()
             
             # Se il nome del file è cambiato, rinomina/sposta il file
             if old_script_path != new_script_path:
@@ -1198,7 +1289,7 @@ class MainWindow(QMainWindow):
                                 "name": new_script_info['name'],
                                 "description": new_script_info['description'],
                                 "path": f"{self.current_category}/{new_script_info['filename']}",
-                                "params": s.get('params', []),
+                                "params": new_script_info.get('params', ''),
                                 "division": new_script_info.get('division', 'LED')
                             }
                             break
@@ -1287,11 +1378,14 @@ class AddModuleDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.module_name = None
+        from config.config import ConfigManager
+        self.config = ConfigManager()
         self.initUI()
 
     def initUI(self):
         self.setWindowTitle("Aggiungi Nuovo Modulo")
-        self.setGeometry(100, 100, 750, 220)
+        width, height = self.config.add_module_dialog_size
+        self.setGeometry(100, 100, width, height)
         
         # Stile con sfondo bianco e testi neri
         self.setStyleSheet("""
@@ -1415,11 +1509,14 @@ class AddScriptDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.script_info = None
+        from config.config import ConfigManager
+        self.config = ConfigManager()
         self.initUI()
 
     def initUI(self):
         self.setWindowTitle("Aggiungi Nuovo Script")
-        self.setGeometry(100, 100, 750, 560)
+        width, height = self.config.add_script_dialog_size
+        self.setGeometry(100, 100, width, height)
         
         # Stile con sfondo bianco e testi neri
         self.setStyleSheet("""
@@ -1514,7 +1611,7 @@ class AddScriptDialog(QDialog):
         layout.addWidget(division_label)
         
         self.division_combo = QComboBox()
-        self.division_combo.addItems(["LED", "LHD"])
+        self.division_combo.addItems(["LED", "LHD", "ALL"])
         self.division_combo.setStyleSheet("""
             QComboBox {
                 background-color: #f5f5f5;
@@ -1686,11 +1783,24 @@ class EditScriptDialog(QDialog):
         self.scripts_dir = scripts_dir
         self.category = category
         self.script_info = None
+        from config.config import ConfigManager
+        self.config = ConfigManager()
         self.initUI()
 
     def initUI(self):
         self.setWindowTitle("Modifica Script")
-        self.setGeometry(100, 100, 750, 600)
+        width, height = self.config.edit_script_dialog_size
+        self.setGeometry(100, 100, width, height)
+        
+        # Verifica che lo script sia valido
+        if not self.script or not isinstance(self.script, dict):
+            self.script = {
+                'name': '',
+                'path': '',
+                'description': '',
+                'division': 'LED',
+                'params': ''
+            }
         
         # Stile con sfondo bianco e testi neri
         self.setStyleSheet("""
@@ -1769,9 +1879,25 @@ class EditScriptDialog(QDialog):
         layout.addWidget(filename_label)
         
         self.filename_input = QLineEdit()
-        # Estrai il filename dal path
+        # Estrai il filename dal path, cercando il file reale con estensione
         script_path = self.script.get('path', '')
-        filename = script_path.split('/')[-1] if '/' in script_path else script_path
+        filename = ''
+        if script_path:
+            # Costruisci il path completo
+            full_path = Path(self.scripts_dir) / script_path
+            # Se il file esiste già con estensione, usa quello
+            if full_path.exists():
+                filename = full_path.name
+            else:
+                # Cerca il file con estensioni comuni
+                for ext in ['.ps1', '.bat', '.py', '.sh', '.exe']:
+                    candidate = Path(str(full_path) + ext)
+                    if candidate.exists():
+                        filename = candidate.name
+                        break
+                # Se non trovato, usa il nome dal path
+                if not filename:
+                    filename = Path(script_path).name
         self.filename_input.setText(filename)
         layout.addWidget(self.filename_input)
         
@@ -1788,7 +1914,7 @@ class EditScriptDialog(QDialog):
         layout.addWidget(division_label)
         
         self.division_combo = QComboBox()
-        self.division_combo.addItems(["LED", "LHD"])
+        self.division_combo.addItems(["LED", "LHD", "ALL"])
         current_division = self.script.get('division', 'LED')
         self.division_combo.setCurrentText(current_division)
         self.division_combo.setStyleSheet("""
@@ -1817,6 +1943,19 @@ class EditScriptDialog(QDialog):
         """)
         layout.addWidget(self.division_combo)
         
+        # Parametri (opzionali)
+        params_label = QLabel("Parametri (opzionali, separati da spazio):")
+        layout.addWidget(params_label)
+        
+        self.params_input = QLineEdit()
+        # Gestisci params come stringa o lista
+        params = self.script.get('params', '')
+        if isinstance(params, list):
+            params = ' '.join(params)
+        self.params_input.setText(params)
+        self.params_input.setPlaceholderText("Es: -arg1 value1 -arg2 value2")
+        layout.addWidget(self.params_input)
+        
         # Codice script
         code_label = QLabel("Codice Script:")
         layout.addWidget(code_label)
@@ -1824,7 +1963,7 @@ class EditScriptDialog(QDialog):
         self.code_input = QTextEdit()
         # Carica il contenuto del file esistente
         try:
-            from pathlib import Path
+            script_path = self.script.get('path', '')
             script_file_path = Path(self.scripts_dir) / script_path
             if script_file_path.exists():
                 self.code_input.setPlainText(script_file_path.read_text(encoding='utf-8'))
@@ -1851,7 +1990,8 @@ class EditScriptDialog(QDialog):
             'filename': self.filename_input.text().strip(),
             'description': self.desc_input.text().strip() or "Nessuna descrizione",
             'code': self.code_input.toPlainText().strip(),
-            'division': self.division_combo.currentText()
+            'division': self.division_combo.currentText(),
+            'params': self.params_input.text().strip()
         }
 
     def accept(self):

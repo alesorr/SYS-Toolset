@@ -361,6 +361,29 @@ class ConfigManager:
         """Colore label LHD"""
         return self.get_color('lhd_color', '#C8E6C9')
     
+    # ===== DIALOG DIMENSIONS =====
+    
+    @property
+    def edit_script_dialog_size(self):
+        """Dimensione dialog modifica script (width, height)"""
+        width = self.get_int('DIALOGS', 'edit_script_width', 900)
+        height = self.get_int('DIALOGS', 'edit_script_height', 700)
+        return (width, height)
+    
+    @property
+    def add_script_dialog_size(self):
+        """Dimensione dialog aggiungi script (width, height)"""
+        width = self.get_int('DIALOGS', 'add_script_width', 750)
+        height = self.get_int('DIALOGS', 'add_script_height', 650)
+        return (width, height)
+    
+    @property
+    def add_module_dialog_size(self):
+        """Dimensione dialog aggiungi modulo (width, height)"""
+        width = self.get_int('DIALOGS', 'add_module_width', 500)
+        height = self.get_int('DIALOGS', 'add_module_height', 200)
+        return (width, height)
+    
     def print_info(self):
         """Stampa informazioni di configurazione (debug)"""
         print(f"[CONFIG] Config file: {self._config_path}")
