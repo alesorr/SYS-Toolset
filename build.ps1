@@ -105,9 +105,13 @@ if ($LASTEXITCODE -eq 0) {
     Remove-Item -Path "dist/scripts" -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -Path "dist/docs" -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -Path "dist/logs" -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path "dist/config" -Recurse -Force -ErrorAction SilentlyContinue
+    
+    # Crea la cartella config in dist
+    New-Item -Path "dist/config" -ItemType Directory -Force | Out-Null
     
     # Copia i file
-    Copy-Item -Path "config/config.ini" -Destination "dist/" -Force -ErrorAction SilentlyContinue
+    Copy-Item -Path "config/config.ini" -Destination "dist/config/config.ini" -Force
     Copy-Item -Path "src/scripts" -Destination "dist/scripts" -Recurse -Force
     Copy-Item -Path "src/docs" -Destination "dist/docs" -Recurse -Force
     

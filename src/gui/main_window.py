@@ -220,6 +220,7 @@ class MainWindow(QMainWindow):
         self.current_script = None
 
         self.initUI()
+        self.show_config_banner()
     
     def _style_messagebox(self, msg_box):
         """Applica lo stile uniforme a tutti i QMessageBox"""
@@ -571,6 +572,46 @@ class MainWindow(QMainWindow):
 
         # Applica stili
         self.apply_styles()
+
+    def show_config_banner(self):
+        """Mostra un banner temporaneo con info sul caricamento del config.ini"""
+        from PyQt6.QtCore import QTimer
+        
+        config_path = self.config.config_file
+        
+        if config_path and config_path.exists():
+            message = f"✓ Config caricato: {config_path}"
+            bg_color = "#4CAF50"  # Verde
+        else:
+            message = "⚠ Config.ini non trovato - Caricati valori di default"
+            bg_color = "#FF9800"  # Arancione
+        
+        # Crea banner
+        banner = QLabel(message, self)
+        banner.setStyleSheet(f"""
+            QLabel {{
+                background-color: {bg_color};
+                color: white;
+                padding: 12px 20px;
+                font-size: 10pt;
+                font-weight: bold;
+                border-radius: 6px;
+            }}
+        """)
+        banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        banner.adjustSize()
+        
+        # Posiziona in basso al centro
+        banner_width = banner.width() + 40
+        banner_height = banner.height()
+        x = (self.width() - banner_width) // 2
+        y = self.height() - banner_height - 60  # 60px dal basso per stare sopra il footer
+        banner.setGeometry(x, y, banner_width, banner_height)
+        
+        banner.show()
+        
+        # Auto-chiudi dopo 4 secondi
+        QTimer.singleShot(4000, banner.deleteLater)
 
     def apply_styles(self):
         """Applica uno stile uniforme all'interfaccia"""
@@ -1535,7 +1576,14 @@ class AddModuleDialog(QDialog):
     def initUI(self):
         self.setWindowTitle("Aggiungi Nuovo Modulo")
         width, height = self.config.add_module_dialog_size
-        self.setGeometry(100, 100, width, height)
+        self.resize(width, height)
+        
+        # Centra rispetto al parent
+        if self.parent():
+            parent_geo = self.parent().geometry()
+            x = parent_geo.x() + (parent_geo.width() - width) // 2
+            y = parent_geo.y() + (parent_geo.height() - height) // 2
+            self.move(x, y)
         
         # Stile con sfondo bianco e testi neri
         self.setStyleSheet("""
@@ -1666,7 +1714,14 @@ class AddScriptDialog(QDialog):
     def initUI(self):
         self.setWindowTitle("Aggiungi Nuovo Script")
         width, height = self.config.add_script_dialog_size
-        self.setGeometry(100, 100, width, height)
+        self.resize(width, height)
+        
+        # Centra rispetto al parent
+        if self.parent():
+            parent_geo = self.parent().geometry()
+            x = parent_geo.x() + (parent_geo.width() - width) // 2
+            y = parent_geo.y() + (parent_geo.height() - height) // 2
+            self.move(x, y)
         
         # Stile con sfondo bianco e testi neri
         self.setStyleSheet("""
@@ -1940,7 +1995,14 @@ class EditScriptDialog(QDialog):
     def initUI(self):
         self.setWindowTitle("Modifica Script")
         width, height = self.config.edit_script_dialog_size
-        self.setGeometry(100, 100, width, height)
+        self.resize(width, height)
+        
+        # Centra rispetto al parent
+        if self.parent():
+            parent_geo = self.parent().geometry()
+            x = parent_geo.x() + (parent_geo.width() - width) // 2
+            y = parent_geo.y() + (parent_geo.height() - height) // 2
+            self.move(x, y)
         
         # Verifica che lo script sia valido
         if not self.script or not isinstance(self.script, dict):

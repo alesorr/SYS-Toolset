@@ -45,39 +45,40 @@ class ConfigManager:
     def _find_config_file(self):
         """Cerca il file config.ini in varie locazioni"""
         
-        # 1. Prova nella cartella dell'eseguibile (per exe)
+        # 1. Se è un exe frozen, cerca SOLO in exe_dir/config/config.ini
         if getattr(sys, 'frozen', False):
-            # OneFile: prima cerca accanto all'exe (per config modificabile)
             exe_dir = Path(sys.executable).parent
             config_file = exe_dir / 'config' / 'config.ini'
+            logger.debug(f"[CONFIG] Frozen exe - cerco config.ini in: {config_file}")
             if config_file.exists():
+                logger.info(f"[CONFIG] Trovato config.ini in: {config_file}")
                 return config_file
-            config_file = exe_dir / 'config.ini'
-            if config_file.exists():
-                return config_file
-            
-            # OneFile: poi cerca in _MEIPASS (config embedded)
-            if hasattr(sys, '_MEIPASS'):
-                meipass_dir = Path(sys._MEIPASS)
-                config_file = meipass_dir / 'config' / 'config.ini'
-                if config_file.exists():
-                    return config_file
+            else:
+                logger.error(f"[CONFIG] Config.ini NON trovato in: {config_file}")
+                return None
         
         # 2. Prova nella cartella config/
         config_file = Path('config') / 'config.ini'
+        logger.debug(f"[CONFIG] Cerco in: {config_file.absolute()}")
         if config_file.exists():
+            logger.info(f"[CONFIG] Trovato config.ini in: {config_file.absolute()}")
             return config_file
         
         # 3. Prova nella root del progetto
         config_file = Path('config.ini')
+        logger.debug(f"[CONFIG] Cerco in: {config_file.absolute()}")
         if config_file.exists():
+            logger.info(f"[CONFIG] Trovato config.ini in: {config_file.absolute()}")
             return config_file
         
         # 4. Prova nella cartella src
         config_file = Path('src') / 'config' / 'config.ini'
+        logger.debug(f"[CONFIG] Cerco in: {config_file.absolute()}")
         if config_file.exists():
+            logger.info(f"[CONFIG] Trovato config.ini in: {config_file.absolute()}")
             return config_file
         
+        logger.warning("[CONFIG] Nessun config.ini trovato in tutte le locazioni")
         return None
     
     def _load_defaults(self):
@@ -112,6 +113,14 @@ class ConfigManager:
             'warning_color': '#FF9800',
             'led_color': '#B3E5FC',
             'lhd_color': '#C8E6C9',
+        }
+        self._config['DIALOGS'] = {
+            'edit_script_width': '900',
+            'edit_script_height': '1000',
+            'add_script_width': '1200',
+            'add_script_height': '650',
+            'add_module_width': '500',
+            'add_module_height': '500',
         }
         self._config['UI'] = {
             'theme': 'light',
@@ -377,22 +386,22 @@ class ConfigManager:
     @property
     def edit_script_dialog_size(self):
         """Dimensione dialog modifica script (width, height)"""
-        width = self.get_int('DIALOGS', 'edit_script_width', 900)
-        height = self.get_int('DIALOGS', 'edit_script_height', 700)
+        width = self.get_int('DIALOGS', 'edit_script_width', 1400)
+        height = self.get_int('DIALOGS', 'edit_script_height', 1000)
         return (width, height)
     
     @property
     def add_script_dialog_size(self):
         """Dimensione dialog aggiungi script (width, height)"""
-        width = self.get_int('DIALOGS', 'add_script_width', 750)
-        height = self.get_int('DIALOGS', 'add_script_height', 650)
+        width = self.get_int('DIALOGS', 'add_script_width', 1400)
+        height = self.get_int('DIALOGS', 'add_script_height', 1000)
         return (width, height)
     
     @property
     def add_module_dialog_size(self):
         """Dimensione dialog aggiungi modulo (width, height)"""
         width = self.get_int('DIALOGS', 'add_module_width', 500)
-        height = self.get_int('DIALOGS', 'add_module_height', 200)
+        height = self.get_int('DIALOGS', 'add_module_height', 500)
         return (width, height)
     
     def print_info(self):
