@@ -624,11 +624,41 @@ class MainWindow(QMainWindow):
         output_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         right_layout.addWidget(output_label)
 
-        # Area output
+        # Area output (stile terminal moderno)
         self.output_text = QTextEdit()
         self.output_text.setReadOnly(True)
-        self.output_text.setFont(QFont("Courier New", 9))
-        self.output_text.setStyleSheet("background-color: white; color: black; border: 1px solid #ddd;")
+        self.output_text.setFont(QFont("Consolas", 10))
+        self.output_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #1e1e1e;
+                color: #d4d4d4;
+                border: 1px solid #3c3c3c;
+                border-radius: 4px;
+                padding: 10px;
+                font-family: 'Consolas', 'Courier New', monospace;
+                font-size: 10pt;
+                line-height: 1.4;
+            }
+            QTextEdit:focus {
+                border: 1px solid #007acc;
+            }
+            QScrollBar:vertical {
+                background: #1e1e1e;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: #424242;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #4e4e4e;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
         right_layout.addWidget(self.output_text)
 
         main_layout.addWidget(right_panel, 2)
@@ -3182,17 +3212,18 @@ class ScriptCodeViewer(QDialog):
 
 
 class WorkflowManagerDialog(QDialog):
-    """Dialog principale per gestire i workflow"""
+    """Dialog principale per gestire i workflow con tab per disponibili e in esecuzione"""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_window = parent
         self.workflows = []
+        self.running_workflows = {}  # Dict: workflow_id -> WorkflowExecutor
         self.initUI()
         self.load_workflows()
     
     def initUI(self):
         self.setWindowTitle("Gestione Workflow")
-        self.resize(700, 500)
+        self.resize(900, 600)
         
         # Centra rispetto al parent
         if self.parent():
@@ -3206,10 +3237,92 @@ class WorkflowManagerDialog(QDialog):
             QDialog {
                 background-color: white;
             }
-            QLabel {
-                color: black;
-                font-size: 10pt;
+            QTabWidget::pane {
+                border: 1px solid #cccccc;
+                border-radius: 4px;
             }
+            QTabBar::tab {
+                background-color: #f0f0f0;
+                color: black;
+                padding: 10px 20px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                margin-right: 2px;
+            }
+            QTabBar::tab:selected {
+                background-color: #FF9800;
+                color: white;
+                font-weight: bold;
+            }
+            QTabBar::tab:hover {
+                background-color: #FFB74D;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        
+        # Titolo
+        title_label = QLabel("🔄 Gestione Workflow")
+        title_label.setStyleSheet("font-weight: bold; font-size: 12pt; color: #FF9800; padding-bottom: 10px;")
+        layout.addWidget(title_label)
+        
+        # Tab widget
+        from PyQt6.QtWidgets import QTabWidget
+        self.tab_widget = QTabWidget()
+        
+        # Tab 1: Workflow disponibili
+        self.available_tab = self.create_available_tab()
+        self.tab_widget.addTab(self.available_tab, "📋 Disponibili")
+        
+        # Tab 2: Workflow in esecuzione
+        self.running_tab = self.create_running_tab()
+        self.tab_widget.addTab(self.running_tab, "▶️ In Esecuzione")
+        
+        layout.addWidget(self.tab_widget)
+        
+        # Bottone chiudi
+        close_layout = QHBoxLayout()
+        close_layout.addStretch()
+        
+        from PyQt6.QtWidgets import QPushButton
+        close_btn = QPushButton("Chiudi")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #757575;
+                color: white;
+                padding: 8px 20px;
+                border: none;
+                border-radius: 4px;
+                font-size: 10pt;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #616161;
+            }
+        """)
+        close_layout.addWidget(close_btn)
+        
+        layout.addLayout(close_layout)
+        
+        self.setLayout(layout)
+    
+    def create_available_tab(self):
+        """Crea il tab per i workflow disponibili"""
+        from PyQt6.QtWidgets import QWidget, QPushButton
+        
+        widget = QWidget()
+        layout = QVBoxLayout()
+        
+        # Descrizione
+        desc_label = QLabel("I workflow permettono di eseguire più script in sequenza.\nSeleziona un workflow per eseguirlo, modificarlo o eliminarlo.")
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet("color: #666666; padding: 10px;")
+        layout.addWidget(desc_label)
+        
+        # Lista workflow
+        self.workflow_list = QListWidget()
+        self.workflow_list.setStyleSheet("""
             QListWidget {
                 background-color: #f9f9f9;
                 border: 1px solid #cccccc;
@@ -3230,44 +3343,50 @@ class WorkflowManagerDialog(QDialog):
                 background-color: #e3f2fd;
             }
         """)
-        
-        from PyQt6.QtWidgets import QPushButton
-        
-        layout = QVBoxLayout()
-        
-        # Titolo
-        title_label = QLabel("🔄 Gestione Workflow")
-        title_label.setStyleSheet("font-weight: bold; font-size: 12pt; color: #FF9800; padding-bottom: 10px;")
-        layout.addWidget(title_label)
-        
-        # Descrizione
-        desc_label = QLabel("I workflow permettono di eseguire più script in sequenza.\nSeleziona un workflow per modificarlo o eliminarlo.")
-        desc_label.setWordWrap(True)
-        desc_label.setStyleSheet("color: #666666; padding-bottom: 10px;")
-        layout.addWidget(desc_label)
-        
-        # Lista workflow
-        self.workflow_list = QListWidget()
         self.workflow_list.itemSelectionChanged.connect(self.on_workflow_selected)
+        self.workflow_list.itemDoubleClicked.connect(self.run_workflow)
         layout.addWidget(self.workflow_list)
         
         # Bottoni azione
         buttons_layout = QHBoxLayout()
         
-        self.create_btn = QPushButton("➕ Nuovo Workflow")
-        self.create_btn.clicked.connect(self.create_workflow)
-        self.create_btn.setStyleSheet("""
+        self.run_btn = QPushButton("▶️ Esegui")
+        self.run_btn.clicked.connect(self.run_workflow)
+        self.run_btn.setEnabled(False)
+        self.run_btn.setStyleSheet("""
             QPushButton {
                 background-color: #4CAF50;
                 color: white;
-                padding: 8px 16px;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 4px;
+                font-size: 11pt;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        buttons_layout.addWidget(self.run_btn)
+        
+        self.create_btn = QPushButton("➕ Nuovo")
+        self.create_btn.clicked.connect(self.create_workflow)
+        self.create_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FF9800;
+                color: white;
+                padding: 10px 20px;
                 border: none;
                 border-radius: 4px;
                 font-size: 10pt;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: #45a049;
+                background-color: #F57C00;
             }
         """)
         buttons_layout.addWidget(self.create_btn)
@@ -3279,7 +3398,7 @@ class WorkflowManagerDialog(QDialog):
             QPushButton {
                 background-color: #2196F3;
                 color: white;
-                padding: 8px 16px;
+                padding: 10px 20px;
                 border: none;
                 border-radius: 4px;
                 font-size: 10pt;
@@ -3302,7 +3421,7 @@ class WorkflowManagerDialog(QDialog):
             QPushButton {
                 background-color: #f44336;
                 color: white;
-                padding: 8px 16px;
+                padding: 10px 20px;
                 border: none;
                 border-radius: 4px;
                 font-size: 10pt;
@@ -3321,31 +3440,76 @@ class WorkflowManagerDialog(QDialog):
         buttons_layout.addStretch()
         layout.addLayout(buttons_layout)
         
-        # Bottone chiudi
-        close_layout = QHBoxLayout()
-        close_layout.addStretch()
+        widget.setLayout(layout)
+        return widget
+    
+    def create_running_tab(self):
+        """Crea il tab per i workflow in esecuzione"""
+        from PyQt6.QtWidgets import QWidget, QSplitter, QTreeWidget, QTreeWidgetItem, QTextEdit
+        from PyQt6.QtCore import Qt
         
-        close_btn = QPushButton("Chiudi")
-        close_btn.clicked.connect(self.accept)
-        close_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #757575;
-                color: white;
-                padding: 8px 20px;
-                border: none;
+        widget = QWidget()
+        layout = QVBoxLayout()
+        
+        # Splitter per dividere tree e log
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        
+        # Tree dei workflow in esecuzione
+        self.running_tree = QTreeWidget()
+        self.running_tree.setHeaderLabels(["Workflow", "Stato"])
+        self.running_tree.setStyleSheet("""
+            QTreeWidget {
+                background-color: #f9f9f9;
+                border: 1px solid #cccccc;
                 border-radius: 4px;
+                color: black;
                 font-size: 10pt;
-                min-width: 80px;
             }
-            QPushButton:hover {
-                background-color: #616161;
+            QTreeWidget::item {
+                padding: 5px;
+            }
+            QTreeWidget::item:selected {
+                background-color: #2196F3;
+                color: white;
             }
         """)
-        close_layout.addWidget(close_btn)
+        self.running_tree.itemSelectionChanged.connect(self.on_running_workflow_selected)
+        splitter.addWidget(self.running_tree)
         
-        layout.addLayout(close_layout)
+        # Log area
+        log_widget = QWidget()
+        log_layout = QVBoxLayout()
+        log_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.setLayout(layout)
+        log_label = QLabel("📄 Log Esecuzione")
+        log_label.setStyleSheet("font-weight: bold; color: #FF9800; padding: 5px;")
+        log_layout.addWidget(log_label)
+        
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #1e1e1e;
+                color: #d4d4d4;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                font-family: 'Consolas', 'Courier New', monospace;
+                font-size: 9pt;
+                padding: 10px;
+            }
+        """)
+        log_layout.addWidget(self.log_text)
+        
+        log_widget.setLayout(log_layout)
+        splitter.addWidget(log_widget)
+        
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
+        
+        layout.addWidget(splitter)
+        
+        widget.setLayout(layout)
+        return widget
     
     def get_workflows_dir(self):
         """Restituisce il percorso della directory workflows"""
@@ -3458,6 +3622,130 @@ class WorkflowManagerDialog(QDialog):
                     if file_path.exists():
                         file_path.unlink()
                         self.load_workflows()
+    
+    def on_workflow_selected(self):
+        """Gestisce la selezione di un workflow"""
+        selected = len(self.workflow_list.selectedItems()) > 0
+        self.run_btn.setEnabled(selected)
+        self.edit_btn.setEnabled(selected)
+        self.delete_btn.setEnabled(selected)
+    
+    def run_workflow(self):
+        """Avvia l'esecuzione di un workflow"""
+        selected_items = self.workflow_list.selectedItems()
+        if not selected_items:
+            return
+        
+        selected_text = selected_items[0].text()
+        workflow_name = selected_text.split('(')[0].strip().replace('📋 ', '')
+        
+        # Trova il workflow
+        workflow_data = None
+        for wf in self.workflows:
+            if wf['name'] == workflow_name:
+                workflow_data = wf
+                break
+        
+        if not workflow_data:
+            return
+        
+        # Crea executor
+        import uuid
+        workflow_id = str(uuid.uuid4())
+        
+        from PyQt6.QtCore import QThread
+        executor = WorkflowExecutor(workflow_id, workflow_data, self.parent_window)
+        executor.log_signal.connect(self.on_workflow_log)
+        executor.status_signal.connect(self.on_workflow_status)
+        executor.finished_signal.connect(self.on_workflow_finished)
+        
+        self.running_workflows[workflow_id] = executor
+        
+        # Aggiungi al tree
+        from PyQt6.QtWidgets import QTreeWidgetItem
+        root_item = QTreeWidgetItem(self.running_tree)
+        root_item.setText(0, workflow_data['name'])
+        root_item.setText(1, "🟡 In avvio...")
+        root_item.setData(0, Qt.ItemDataRole.UserRole, workflow_id)
+        
+        # Aggiungi gli script come figli
+        for script in workflow_data['scripts']:
+            script_item = QTreeWidgetItem(root_item)
+            script_item.setText(0, script)
+            script_item.setText(1, "⏸️ In attesa")
+        
+        root_item.setExpanded(True)
+        
+        # Avvia esecuzione
+        executor.start()
+        
+        # Cambia tab per mostrare l'esecuzione
+        self.tab_widget.setCurrentIndex(1)
+        
+        self.parent_window.output_text.append(f"[WORKFLOW] Avviato workflow: {workflow_data['name']}")
+    
+    def on_workflow_log(self, workflow_id, message):
+        """Riceve log dal workflow"""
+        # Aggiorna il log nella text area se il workflow è selezionato
+        selected_items = self.running_tree.selectedItems()
+        if selected_items:
+            selected_id = selected_items[0].data(0, Qt.ItemDataRole.UserRole)
+            if selected_id == workflow_id:
+                self.log_text.append(message)
+    
+    def on_workflow_status(self, workflow_id, script_name, status):
+        """Aggiorna lo stato di uno script nel workflow"""
+        # Trova l'item nel tree
+        root = self.running_tree.invisibleRootItem()
+        for i in range(root.childCount()):
+            item = root.child(i)
+            if item.data(0, Qt.ItemDataRole.UserRole) == workflow_id:
+                # Aggiorna stato root
+                if status == "running":
+                    item.setText(1, "🟢 In esecuzione")
+                elif status == "completed":
+                    item.setText(1, "✅ Completato")
+                elif status == "error":
+                    item.setText(1, "❌ Errore")
+                
+                # Aggiorna stato script specifico
+                if script_name:
+                    for j in range(item.childCount()):
+                        child = item.child(j)
+                        if child.text(0) == script_name:
+                            if status == "running":
+                                child.setText(1, "🟢 In esecuzione")
+                            elif status == "completed":
+                                child.setText(1, "✅ Completato")
+                            elif status == "error":
+                                child.setText(1, "❌ Errore")
+                break
+    
+    def on_workflow_finished(self, workflow_id, success):
+        """Gestisce la fine dell'esecuzione di un workflow"""
+        if workflow_id in self.running_workflows:
+            executor = self.running_workflows[workflow_id]
+            workflow_name = executor.workflow_data['name']
+            
+            if success:
+                self.parent_window.output_text.append(f"[WORKFLOW] ✅ Completato: {workflow_name}")
+            else:
+                self.parent_window.output_text.append(f"[WORKFLOW] ❌ Errore durante: {workflow_name}")
+            
+            # Non rimuoviamo subito, lasciamo che l'utente possa vedere il log
+            # del running_workflows.pop(workflow_id)
+    
+    def on_running_workflow_selected(self):
+        """Gestisce la selezione di un workflow in esecuzione per mostrare il log"""
+        selected_items = self.running_tree.selectedItems()
+        if not selected_items:
+            self.log_text.clear()
+            return
+        
+        workflow_id = selected_items[0].data(0, Qt.ItemDataRole.UserRole)
+        if workflow_id and workflow_id in self.running_workflows:
+            executor = self.running_workflows[workflow_id]
+            self.log_text.setPlainText(executor.get_full_log())
     
     def save_workflow(self, workflow_data):
         """Salva il workflow su file JSON"""
@@ -3725,11 +4013,15 @@ class WorkflowEditorDialog(QDialog):
         
         all_scripts = self.parent_window.repository.get_all_scripts()
         
+        # Salva il mapping tra nome visualizzato e nome script
+        self.script_map = {}  # {display_name: script_name}
+        
         for script in all_scripts:
             script_name = script.get('name', 'Unknown')
-            category = script.get('category', 'N/A')
-            item_text = f"{script_name} ({category})"
-            self.available_list.addItem(item_text)
+            category = script.get('category', 'Uncategorized')
+            display_text = f"{script_name} ({category})"
+            self.available_list.addItem(display_text)
+            self.script_map[display_text] = script_name
     
     def load_existing_workflow(self):
         """Carica i dati di un workflow esistente"""
@@ -3738,30 +4030,34 @@ class WorkflowEditorDialog(QDialog):
         
         self.name_input.setText(self.existing_workflow.get('name', ''))
         
-        # Carica gli script nel workflow
-        for script_info in self.existing_workflow.get('scripts', []):
-            self.workflow_list.addItem(script_info)
-            self.selected_scripts.append(script_info)
+        # Carica gli script nel workflow (script_info contiene i nomi degli script)
+        for script_name in self.existing_workflow.get('scripts', []):
+            # Trova il nome visualizzato corrispondente
+            display_name = self.get_display_name_for_script(script_name)
+            self.workflow_list.addItem(display_name)
+            self.selected_scripts.append(script_name)
     
     def add_script_to_workflow(self):
         """Aggiunge uno script al workflow"""
         selected_items = self.available_list.selectedItems()
         if selected_items:
-            script_text = selected_items[0].text()
-            if script_text not in self.selected_scripts:
-                self.workflow_list.addItem(script_text)
-                self.selected_scripts.append(script_text)
+            display_text = selected_items[0].text()
+            script_name = self.script_map.get(display_text, display_text)
+            if script_name not in self.selected_scripts:
+                self.workflow_list.addItem(display_text)
+                self.selected_scripts.append(script_name)
     
     def remove_script_from_workflow(self):
         """Rimuove uno script dal workflow"""
         selected_items = self.workflow_list.selectedItems()
         if selected_items:
             for item in selected_items:
-                script_text = item.text()
+                display_text = item.text()
+                script_name = self.script_map.get(display_text, display_text)
                 row = self.workflow_list.row(item)
                 self.workflow_list.takeItem(row)
-                if script_text in self.selected_scripts:
-                    self.selected_scripts.remove(script_text)
+                if script_name in self.selected_scripts:
+                    self.selected_scripts.remove(script_name)
     
     def move_script_up(self):
         """Sposta lo script selezionato verso l'alto"""
@@ -3851,12 +4147,17 @@ class WorkflowEditorDialog(QDialog):
             msg.exec()
             return
         
-        # Aggiorna la lista degli script dal QListWidget per mantenere l'ordine corrente
-        self.selected_scripts = [self.workflow_list.item(i).text() for i in range(self.workflow_list.count())]
+        # Mantieni l'ordine corrente dei nomi script (già in self.selected_scripts)
+        # Verifica coerenza con l'ordine visualizzato
+        ordered_script_names = []
+        for i in range(self.workflow_list.count()):
+            display_text = self.workflow_list.item(i).text()
+            script_name = self.script_map.get(display_text, display_text)
+            ordered_script_names.append(script_name)
         
         self.workflow_data = {
             'name': name,
-            'scripts': self.selected_scripts
+            'scripts': ordered_script_names
         }
         
         super().accept()
@@ -3864,6 +4165,217 @@ class WorkflowEditorDialog(QDialog):
     def get_workflow_data(self):
         """Restituisce i dati del workflow"""
         return self.workflow_data
+    
+    def get_display_name_for_script(self, script_name):
+        """Trova il nome visualizzato per uno script_name"""
+        # Cerca nel mapping inverso
+        for display_name, sname in self.script_map.items():
+            if sname == script_name:
+                return display_name
+        # Se non trovato, cerca nello script repository
+        if self.parent_window and hasattr(self.parent_window, 'repository'):
+            all_scripts = self.parent_window.repository.get_all_scripts()
+            for script in all_scripts:
+                if script.get('name') == script_name:
+                    category = script.get('category', 'Uncategorized')
+                    return f"{script_name} ({category})"
+        # Fallback: usa il nome script
+        return script_name
+
+
+class WorkflowExecutor(QThread):
+    """Thread per eseguire un workflow in background"""
+    from PyQt6.QtCore import pyqtSignal
+    
+    log_signal = pyqtSignal(str, str)  # workflow_id, message
+    status_signal = pyqtSignal(str, str, str)  # workflow_id, script_name, status
+    finished_signal = pyqtSignal(str, bool)  # workflow_id, success
+    
+    def __init__(self, workflow_id, workflow_data, main_window):
+        super().__init__()
+        self.workflow_id = workflow_id
+        self.workflow_data = workflow_data
+        self.main_window = main_window
+        self.repository = main_window.repository if hasattr(main_window, 'repository') else None
+        self.log_buffer = []
+        self.log_file = None
+    
+    def run(self):
+        """Esegue il workflow"""
+        import subprocess
+        import sys
+        from datetime import datetime
+        from pathlib import Path
+        
+        workflow_name = self.workflow_data['name']
+        scripts = self.workflow_data.get('scripts', [])
+        
+        # Crea file di log
+        if getattr(sys, 'frozen', False):
+            exe_dir = Path(sys.executable).parent
+            logs_dir = exe_dir / "logs"
+        else:
+            base_dir = Path(__file__).parent.parent.parent
+            logs_dir = base_dir / "logs"
+        
+        logs_dir.mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_name = workflow_name.replace(' ', '_').replace('/', '_').replace('\\', '_')
+        log_filename = f"workflow_{safe_name}_{timestamp}.log"
+        self.log_file = logs_dir / log_filename
+        
+        success = True
+        
+        try:
+            self.log(f"=== Workflow: {workflow_name} ===")
+            self.log(f"Data/Ora: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            self.log(f"Script da eseguire: {len(scripts)}")
+            self.log(f"Log file: {self.log_file}")
+            self.log("=" * 60)
+            self.log("")
+            
+            self.status_signal.emit(self.workflow_id, None, "running")
+            
+            for idx, script_name in enumerate(scripts, 1):
+                self.log(f"[{idx}/{len(scripts)}] Esecuzione: {script_name}")
+                self.status_signal.emit(self.workflow_id, script_name, "running")
+                
+                # Trova lo script nel repository usando script_name
+                script_info = self.find_script_by_name(script_name)
+                if not script_info:
+                    self.log(f"  ❌ ERRORE: Script '{script_name}' non trovato nel repository!")
+                    self.status_signal.emit(self.workflow_id, script_name, "error")
+                    success = False
+                    break
+                
+                # Il path nel repository è relativo (es. "dispatcher/restart_dispatcher.ps1")
+                # Dobbiamo costruire il path completo
+                relative_path = script_info.get('path', '')
+                if getattr(sys, 'frozen', False):
+                    exe_dir = Path(sys.executable).parent
+                    script_path = exe_dir / "scripts" / relative_path
+                else:
+                    base_dir = Path(__file__).parent.parent.parent
+                    script_path = base_dir / "scripts" / relative_path
+                
+                if not script_path.exists():
+                    self.log(f"  ❌ ERRORE: File non trovato su disco: {script_path}")
+                    self.status_signal.emit(self.workflow_id, script_name, "error")
+                    success = False
+                    break
+                
+                self.log(f"  Path: {script_path}")
+                
+                # Esegui lo script
+                try:
+                    # Determina l'interprete
+                    if script_path.suffix.lower() == '.ps1':
+                        cmd = ['powershell', '-ExecutionPolicy', 'Bypass', '-File', str(script_path)]
+                    elif script_path.suffix.lower() == '.py':
+                        cmd = [sys.executable, str(script_path)]
+                    elif script_path.suffix.lower() in ['.bat', '.cmd']:
+                        cmd = ['cmd', '/c', str(script_path)]
+                    else:
+                        cmd = [str(script_path)]
+                    
+                    # Mostra il comando nel log PRIMA dell'esecuzione
+                    self.log(f"")
+                    self.log(f"  📌 Comando eseguito:")
+                    self.log(f"  {' '.join(cmd)}")
+                    self.log(f"")
+                    
+                    # Esegui
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=300  # 5 minuti timeout
+                    )
+                    
+                    # Log output
+                    if result.stdout:
+                        self.log(f"  Output:")
+                        for line in result.stdout.splitlines():
+                            self.log(f"    {line}")
+                    
+                    if result.stderr:
+                        self.log(f"  Errori:")
+                        for line in result.stderr.splitlines():
+                            self.log(f"    {line}")
+                    
+                    if result.returncode == 0:
+                        self.log(f"  ✅ Completato con successo (exit code: 0)")
+                        self.status_signal.emit(self.workflow_id, script_name, "completed")
+                    else:
+                        self.log(f"  ❌ Errore (exit code: {result.returncode})")
+                        self.status_signal.emit(self.workflow_id, script_name, "error")
+                        success = False
+                        break
+                
+                except subprocess.TimeoutExpired:
+                    self.log(f"  ❌ ERRORE: Timeout (5 minuti)")
+                    self.status_signal.emit(self.workflow_id, script_name, "error")
+                    success = False
+                    break
+                except Exception as e:
+                    self.log(f"  ❌ ERRORE: {e}")
+                    self.status_signal.emit(self.workflow_id, script_name, "error")
+                    success = False
+                    break
+                
+                self.log("")
+            
+            # Riepilogo finale
+            self.log("=" * 60)
+            if success:
+                self.log("✅ Workflow completato con successo!")
+                self.status_signal.emit(self.workflow_id, None, "completed")
+            else:
+                self.log("❌ Workflow terminato con errori")
+                self.status_signal.emit(self.workflow_id, None, "error")
+            
+        except Exception as e:
+            self.log(f"❌ ERRORE CRITICO: {e}")
+            self.status_signal.emit(self.workflow_id, None, "error")
+            success = False
+        
+        finally:
+            self.finished_signal.emit(self.workflow_id, success)
+    
+    def find_script_by_name(self, script_name):
+        """Trova lo script nel repository usando il nome"""
+        if not self.repository:
+            return None
+        
+        # Cerca in tutti gli script del repository
+        all_scripts = self.repository.get_all_scripts()
+        for script in all_scripts:
+            if script.get('name') == script_name:
+                return script
+        
+        return None
+    
+    def log(self, message):
+        """Aggiunge un messaggio al log"""
+        from datetime import datetime
+        
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        log_message = f"[{timestamp}] {message}"
+        
+        self.log_buffer.append(log_message)
+        self.log_signal.emit(self.workflow_id, log_message)
+        
+        # Scrivi su file
+        if self.log_file:
+            try:
+                with open(self.log_file, 'a', encoding='utf-8') as f:
+                    f.write(log_message + '\n')
+            except:
+                pass
+    
+    def get_full_log(self):
+        """Restituisce tutto il log accumulato"""
+        return '\n'.join(self.log_buffer)
 
 
 class EmailConfigDialog(QDialog):

@@ -122,6 +122,21 @@ if (Test-Path "workflows/*.json") {
     Write-Host "[INFO] Nessun workflow da copiare" -ForegroundColor Yellow
 }
 
+# Copia cartella docs in dist
+Write-Host ""
+Write-Host "Configurando directory docs..." -ForegroundColor Cyan
+if (-not (Test-Path "dist/docs")) {
+    New-Item -Path "dist/docs" -ItemType Directory -Force | Out-Null
+    Write-Host "[OK] Directory dist/docs creata" -ForegroundColor Green
+}
+
+if (Test-Path "docs") {
+    Copy-Item -Path "docs" -Destination "dist/" -Recurse -Force
+    Write-Host "[OK] Directory docs copiata in dist/" -ForegroundColor Green
+} else {
+    Write-Host "[WARN] Directory docs non trovata nella radice del progetto" -ForegroundColor Yellow
+}
+
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor Green
 Write-Host "   Build Script Completato!" -ForegroundColor Green
