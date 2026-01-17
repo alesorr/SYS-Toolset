@@ -92,7 +92,9 @@ imports:
  &#8226;   <a href="#codecs">codecs</a>
  &#8226;   <a href="#collections">collections</a>
  &#8226;   <a href="#config.config">config.config</a>
+ &#8226;   <a href="#config.setting">config.setting</a>
  &#8226;   <a href="#copyreg">copyreg</a>
+ &#8226;   <a href="#db">db</a>
  &#8226;   <a href="#db.script_repository">db.script_repository</a>
  &#8226;   <a href="#encodings">encodings</a>
  &#8226;   <a href="#encodings.aliases">encodings.aliases</a>
@@ -219,6 +221,7 @@ imports:
  &#8226;   <a href="#enum">enum</a>
  &#8226;   <a href="#functools">functools</a>
  &#8226;   <a href="#genericpath">genericpath</a>
+ &#8226;   <a href="#gui">gui</a>
  &#8226;   <a href="#gui.main_window">gui.main_window</a>
  &#8226;   <a href="#gui.splash_screen">gui.splash_screen</a>
  &#8226;   <a href="#heapq">heapq</a>
@@ -226,6 +229,8 @@ imports:
  &#8226;   <a href="#keyword">keyword</a>
  &#8226;   <a href="#linecache">linecache</a>
  &#8226;   <a href="#locale">locale</a>
+ &#8226;   <a href="#models">models</a>
+ &#8226;   <a href="#models.script_model">models.script_model</a>
  &#8226;   <a href="#ntpath">ntpath</a>
  &#8226;   <a href="#operator">operator</a>
  &#8226;   <a href="#os">os</a>
@@ -248,6 +253,8 @@ imports:
  &#8226;   <a href="#sys">sys</a>
  &#8226;   <a href="#traceback">traceback</a>
  &#8226;   <a href="#types">types</a>
+ &#8226;   <a href="#utils">utils</a>
+ &#8226;   <a href="#utils.file_loader">utils.file_loader</a>
  &#8226;   <a href="#utils.logger">utils.logger</a>
  &#8226;   <a href="#warnings">warnings</a>
  &#8226;   <a href="#weakref">weakref</a>
@@ -615,6 +622,7 @@ imported by:
  &#8226;   <a href="#PyQt6.uic.Loader.loader">PyQt6.uic.Loader.loader</a>
  &#8226;   <a href="#PyQt6.uic.Loader.qobjectcreator">PyQt6.uic.Loader.qobjectcreator</a>
  &#8226;   <a href="#app.py">app.py</a>
+ &#8226;   <a href="#config.config">config.config</a>
  &#8226;   <a href="#gui.main_window">gui.main_window</a>
  &#8226;   <a href="#gui.splash_screen">gui.splash_screen</a>
 
@@ -1349,6 +1357,7 @@ imported by:
  &#8226;   <a href="#PyQt6.uic.load_ui">PyQt6.uic.load_ui</a>
  &#8226;   <a href="#PyQt6.uic.pyuic">PyQt6.uic.pyuic</a>
  &#8226;   <a href="#app.py">app.py</a>
+ &#8226;   <a href="#config.config">config.config</a>
  &#8226;   <a href="#gui.main_window">gui.main_window</a>
  &#8226;   <a href="#gui.splash_screen">gui.splash_screen</a>
 
@@ -3716,6 +3725,7 @@ imported by:
 <span class="moduletype">NamespacePackage</span>  <div class="import">
 imported by:
     <a href="#config.config">config.config</a>
+ &#8226;   <a href="#config.setting">config.setting</a>
 
   </div>
 
@@ -3726,7 +3736,9 @@ imported by:
   <a target="code" href="///C:/Users/alex.sorrentino/OneDrive%20-%20DGS%20SpA/Desktop/TC/SYS-Toolset/src/config/config.py" type="text/plain"><tt>config.config</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
-    <a href="#config">config</a>
+    <a href="#PyQt6.QtGui">PyQt6.QtGui</a>
+ &#8226;   <a href="#PyQt6.QtWidgets">PyQt6.QtWidgets</a>
+ &#8226;   <a href="#config">config</a>
  &#8226;   <a href="#configparser">configparser</a>
  &#8226;   <a href="#os">os</a>
  &#8226;   <a href="#pathlib">pathlib</a>
@@ -3739,6 +3751,22 @@ imported by:
     <a href="#app.py">app.py</a>
  &#8226;   <a href="#gui.main_window">gui.main_window</a>
  &#8226;   <a href="#gui.splash_screen">gui.splash_screen</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="config.setting"></a>
+  <a target="code" href="///C:/Users/alex.sorrentino/OneDrive%20-%20DGS%20SpA/Desktop/TC/SYS-Toolset/src/config/setting.py" type="text/plain"><tt>config.setting</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#config">config</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#app.py">app.py</a>
 
   </div>
 
@@ -4021,7 +4049,8 @@ imported by:
   <a target="code" href="-" type="text/plain"><tt>db</tt></a>
 <span class="moduletype">NamespacePackage</span>  <div class="import">
 imported by:
-    <a href="#db.script_repository">db.script_repository</a>
+    <a href="#app.py">app.py</a>
+ &#8226;   <a href="#db.script_repository">db.script_repository</a>
 
   </div>
 
@@ -7431,12 +7460,14 @@ imported by:
   <a target="code" href="///C:/Users/alex.sorrentino/OneDrive%20-%20DGS%20SpA/Desktop/TC/SYS-Toolset/src/gui/__init__.py" type="text/plain"><tt>gui</tt></a>
 <span class="moduletype">Package</span>  <div class="import">
 imports:
-    <a href="#gui.main_window">gui.main_window</a>
+    <a href="#os">os</a>
+ &#8226;   <a href="#sys">sys</a>
 
   </div>
   <div class="import">
 imported by:
-    <a href="#gui.main_window">gui.main_window</a>
+    <a href="#app.py">app.py</a>
+ &#8226;   <a href="#gui.main_window">gui.main_window</a>
  &#8226;   <a href="#gui.splash_screen">gui.splash_screen</a>
 
   </div>
@@ -7460,6 +7491,7 @@ imports:
  &#8226;   <a href="#json">json</a>
  &#8226;   <a href="#os">os</a>
  &#8226;   <a href="#pathlib">pathlib</a>
+ &#8226;   <a href="#re">re</a>
  &#8226;   <a href="#shutil">shutil</a>
  &#8226;   <a href="#subprocess">subprocess</a>
  &#8226;   <a href="#sys">sys</a>
@@ -7470,7 +7502,6 @@ imports:
   <div class="import">
 imported by:
     <a href="#app.py">app.py</a>
- &#8226;   <a href="#gui">gui</a>
 
   </div>
 
@@ -8615,6 +8646,34 @@ imported by:
 </div>
 
 <div class="node">
+  <a name="models"></a>
+  <a target="code" href="-" type="text/plain"><tt>models</tt></a>
+<span class="moduletype">NamespacePackage</span>  <div class="import">
+imported by:
+    <a href="#app.py">app.py</a>
+ &#8226;   <a href="#models.script_model">models.script_model</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="models.script_model"></a>
+  <a target="code" href="///C:/Users/alex.sorrentino/OneDrive%20-%20DGS%20SpA/Desktop/TC/SYS-Toolset/src/models/script_model.py" type="text/plain"><tt>models.script_model</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#models">models</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#app.py">app.py</a>
+
+  </div>
+
+</div>
+
+<div class="node">
   <a name="msvcrt"></a>
   <tt>msvcrt</tt> <span class="moduletype"><i>(builtin module)</i></span>  <div class="import">
 imported by:
@@ -9615,6 +9674,7 @@ imported by:
  &#8226;   <a href="#getpass">getpass</a>
  &#8226;   <a href="#gettext">gettext</a>
  &#8226;   <a href="#glob">glob</a>
+ &#8226;   <a href="#gui">gui</a>
  &#8226;   <a href="#gui.main_window">gui.main_window</a>
  &#8226;   <a href="#gzip">gzip</a>
  &#8226;   <a href="#http.cookiejar">http.cookiejar</a>
@@ -9718,6 +9778,7 @@ imported by:
  &#8226;   <a href="#importlib.resources.readers">importlib.resources.readers</a>
  &#8226;   <a href="#pathlib._abc">pathlib._abc</a>
  &#8226;   <a href="#pathlib._local">pathlib._local</a>
+ &#8226;   <a href="#utils.file_loader">utils.file_loader</a>
  &#8226;   <a href="#utils.logger">utils.logger</a>
  &#8226;   <a href="#zipfile._path">zipfile._path</a>
 
@@ -10131,6 +10192,7 @@ imported by:
  &#8226;   <a href="#ftplib">ftplib</a>
  &#8226;   <a href="#gettext">gettext</a>
  &#8226;   <a href="#glob">glob</a>
+ &#8226;   <a href="#gui.main_window">gui.main_window</a>
  &#8226;   <a href="#http.client">http.client</a>
  &#8226;   <a href="#http.cookiejar">http.cookiejar</a>
  &#8226;   <a href="#importlib.metadata">importlib.metadata</a>
@@ -10749,6 +10811,7 @@ imported by:
  &#8226;   <a href="#getpass">getpass</a>
  &#8226;   <a href="#gettext">gettext</a>
  &#8226;   <a href="#glob">glob</a>
+ &#8226;   <a href="#gui">gui</a>
  &#8226;   <a href="#gui.main_window">gui.main_window</a>
  &#8226;   <a href="#gzip">gzip</a>
  &#8226;   <a href="#http.client">http.client</a>
@@ -11378,7 +11441,26 @@ imported by:
   <a target="code" href="-" type="text/plain"><tt>utils</tt></a>
 <span class="moduletype">NamespacePackage</span>  <div class="import">
 imported by:
-    <a href="#utils.logger">utils.logger</a>
+    <a href="#app.py">app.py</a>
+ &#8226;   <a href="#utils.file_loader">utils.file_loader</a>
+ &#8226;   <a href="#utils.logger">utils.logger</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="utils.file_loader"></a>
+  <a target="code" href="///C:/Users/alex.sorrentino/OneDrive%20-%20DGS%20SpA/Desktop/TC/SYS-Toolset/src/utils/file_loader.py" type="text/plain"><tt>utils.file_loader</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#pathlib">pathlib</a>
+ &#8226;   <a href="#utils">utils</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#app.py">app.py</a>
 
   </div>
 

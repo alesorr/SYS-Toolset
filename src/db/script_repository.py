@@ -127,3 +127,10 @@ class ScriptRepository:
 
     def get_scripts_by_category(self, category):
         return self.index.get(category, [])
+    
+    def get_all_scripts(self):
+        """Restituisce tutti gli script di tutte le categorie"""
+        all_scripts = []
+        for scripts in self.index.values():
+            all_scripts.extend(scripts)
+        return all_scripts

@@ -1,16 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_submodules
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('config/config.ini', 'config'), ('scripts', 'scripts'), ('docs', 'docs')]
+datas = [('config/config.ini', 'config'), ('scripts', 'scripts'), ('docs', 'docs'), ('src/gui', 'gui')]
 binaries = []
-hiddenimports = ['config.config']
+hiddenimports = ['config.config', 'config.setting', 'gui', 'gui.main_window', 'gui.splash_screen', 'db', 'db.script_repository', 'menu', 'menu.tool_menu', 'utils', 'utils.logger', 'utils.file_loader', 'models', 'models.script_model']
+hiddenimports += collect_submodules('gui')
 tmp_ret = collect_all('PyQt6')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
     ['src\\app.py'],
-    pathex=[],
+    pathex=['src'],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
@@ -33,7 +35,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,

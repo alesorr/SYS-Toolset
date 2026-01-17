@@ -115,12 +115,12 @@ class ConfigManager:
             'lhd_color': '#C8E6C9',
         }
         self._config['DIALOGS'] = {
-            'edit_script_width': '900',
-            'edit_script_height': '1000',
-            'add_script_width': '1200',
-            'add_script_height': '650',
-            'add_module_width': '500',
-            'add_module_height': '500',
+            'edit_script_width': '1300',
+            'edit_script_height': '900',
+            'add_script_width': '1300',
+            'add_script_height': '900',
+            'add_module_width': '600',
+            'add_module_height': '600',
         }
         self._config['UI'] = {
             'theme': 'light',
@@ -383,26 +383,129 @@ class ConfigManager:
     
     # ===== DIALOG DIMENSIONS =====
     
+    def _get_screen_size(self):
+        """Ottiene la dimensione dello schermo"""
+        try:
+            from PyQt6.QtWidgets import QApplication
+            from PyQt6.QtGui import QScreen
+            screen = QApplication.primaryScreen()
+            if screen:
+                geometry = screen.availableGeometry()
+                return (geometry.width(), geometry.height())
+        except:
+            pass
+        # Fallback a dimensioni standard se non riesce
+        return (1920, 1080)
+    
+    def _calculate_dialog_size(self, width_key, height_key, default_width_percent, default_height_percent):
+        """Calcola dimensioni dialog basate su percentuale schermo o pixel assoluti"""
+        screen_width, screen_height = self._get_screen_size()
+        
+        # Prova prima con chiavi percentuali
+        width_percent = self.get(f'DIALOGS', f'{width_key}_percent')
+        height_percent = self.get(f'DIALOGS', f'{height_key}_percent')
+        
+        # Debug
+        if self.debug:
+            print(f"[CONFIG DEBUG] Calculating dialog size for {width_key}")
+            print(f"[CONFIG DEBUG] Screen size: {screen_width}x{screen_height}")
+            print(f"[CONFIG DEBUG] width_percent from config: {width_percent}")
+            print(f"[CONFIG DEBUG] height_percent from config: {height_percent}")
+        
+        if width_percent and height_percent:
+            try:
+                w_pct = float(width_percent)
+                h_pct = float(height_percent)
+                width = int(screen_width * w_pct)
+                height = int(screen_height * h_pct)
+                if self.debug:
+                    print(f"[CONFIG DEBUG] Calculated from percent: {width}x{height}")
+                return (width, height)
+            except Exception as e:
+                if self.debug:
+                    print(f"[CONFIG DEBUG] Error parsing percent values: {e}")
+                pass
+        
+        # Fallback a valori assoluti o default percentuali
+        width = self.get_int('DIALOGS', width_key, int(screen_width * default_width_percent))
+        height = self.get_int('DIALOGS', height_key, int(screen_height * default_height_percent))
+        if self.debug:
+            print(f"[CONFIG DEBUG] Fallback to absolute/default: {width}x{height}")
+        return (width, height)
+    
     @property
     def edit_script_dialog_size(self):
         """Dimensione dialog modifica script (width, height)"""
-        width = self.get_int('DIALOGS', 'edit_script_width', 1400)
-        height = self.get_int('DIALOGS', 'edit_script_height', 1000)
-        return (width, height)
+        return self._calculate_dialog_size('edit_script_width', 'edit_script_height', 0.65, 0.70)
     
     @property
     def add_script_dialog_size(self):
         """Dimensione dialog aggiungi script (width, height)"""
-        width = self.get_int('DIALOGS', 'add_script_width', 1400)
-        height = self.get_int('DIALOGS', 'add_script_height', 1000)
-        return (width, height)
+        return self._calculate_dialog_size('add_script_width', 'add_script_height', 0.65, 0.70)
     
     @property
     def add_module_dialog_size(self):
         """Dimensione dialog aggiungi modulo (width, height)"""
-        width = self.get_int('DIALOGS', 'add_module_width', 500)
-        height = self.get_int('DIALOGS', 'add_module_height', 500)
+        width = self.get_int('DIALOGS', 'add_module_width', 600)
+        height = self.get_int('DIALOGS', 'add_module_height', 400)
         return (width, height)
+    
+    @property
+    def documentation_dialog_size(self):
+        """Dimensione dialog documentazione (width, height)"""
+        return self._calculate_dialog_size('documentation_width', 'documentation_height', 0.70, 0.75)
+    
+    @property
+    def code_viewer_dialog_size(self):
+        """Dimensione dialog visualizzatore codice (width, height)"""
+        return self._calculate_dialog_size('code_viewer_width', 'code_viewer_height', 0.75, 0.80)
+    
+    # EMAIL PROPERTIES
+    @property
+    def email_enabled(self):
+        """Verifica se l'invio email è abilitato"""
+        return self._config.getboolean('EMAIL', 'enabled', fallback=False)
+    
+    @property
+    def smtp_server(self):
+        """Server SMTP"""
+        return self._config.get('EMAIL', 'smtp_server', fallback='smtp.gmail.com')
+    
+    @property
+    def smtp_port(self):
+        """Porta SMTP"""
+        return self._config.getint('EMAIL', 'smtp_port', fallback=587)
+    
+    @property
+    def use_tls(self):
+        """Usa TLS per SMTP"""
+        return self._config.getboolean('EMAIL', 'use_tls', fallback=True)
+    
+    @property
+    def sender_email(self):
+        """Email del mittente"""
+        return self._config.get('EMAIL', 'sender_email', fallback='')
+    
+    @property
+    def sender_password(self):
+        """Password email del mittente"""
+        return self._config.get('EMAIL', 'sender_password', fallback='')
+    
+    @property
+    def default_recipients(self):
+        """Lista destinatari di default"""
+        recipients_str = self._config.get('EMAIL', 'default_recipients', fallback='')
+        return [r.strip() for r in recipients_str.split(',') if r.strip()]
+    
+    @property
+    def default_email_subject(self):
+        """Oggetto email di default"""
+        return self._config.get('EMAIL', 'default_subject', fallback='[SYS Toolset] Esecuzione {script_name}')
+    
+    @property
+    def default_email_body(self):
+        """Corpo email di default"""
+        return self._config.get('EMAIL', 'default_body', fallback='Report di esecuzione:\n\n{output}')
     
     def print_info(self):
         """Stampa informazioni di configurazione (debug)"""

@@ -70,12 +70,11 @@ def main():
     app.processEvents()
     repo = ScriptRepository(base_path=str(config.scripts_dir))
     
-    # Verifica che gli script siano stati caricati
+    # Verifica che gli script siano stati caricati (solo warning, non bloccare)
     if not repo.get_categories():
-        splash.close()
-        print("[ERROR] Nessuna categoria di script trovata!")
-        print(f"[ERROR] Cerco in: {config.scripts_dir}")
-        sys.exit(1)
+        logger.warning("Nessuna categoria di script trovata in fase di startup")
+        logger.warning(f"Cerco in: {config.scripts_dir}")
+        # Non usciamo, permettiamo all'app di avviarsi comunque
     
     # Fase 3: Inizializzazione interfaccia grafica
     splash.show_message("Inizializzazione interfaccia grafica...", 60)
@@ -101,4 +100,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        logger.exception(f"ERRORE CRITICO durante l'avvio: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)

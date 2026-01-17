@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QListWidget, QListWidgetItem,
     QTextEdit, QSplitter, QMessageBox, QDialog,
     QDialogButtonBox, QScrollArea, QFrame, QProgressBar,
-    QLineEdit, QComboBox, QTabWidget
+    QLineEdit, QComboBox, QTabWidget, QCheckBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer
 from PyQt6.QtGui import QIcon, QFont, QColor
@@ -185,8 +185,11 @@ class DocumentationViewer(QDialog):
     """Dialog per visualizzare la documentazione di uno script"""
     def __init__(self, title, doc_path, parent=None):
         super().__init__(parent)
+        from config.config import ConfigManager
+        self.config = ConfigManager()
         self.setWindowTitle(f"Documentazione - {title}")
-        self.setGeometry(100, 100, 700, 500)
+        width, height = self.config.documentation_dialog_size
+        self.resize(width, height)
 
         layout = QVBoxLayout()
         
@@ -288,6 +291,28 @@ class MainWindow(QMainWindow):
             }}
         """)
         
+        self.workflow_button = QPushButton("🔄 Workflow")
+        self.workflow_button.setMaximumWidth(110)
+        self.workflow_button.setMaximumHeight(28)
+        self.workflow_button.clicked.connect(self.on_workflow_clicked)
+        self.workflow_button.setStyleSheet("""
+            QPushButton {
+                background-color: #FF9800;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-weight: bold;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background-color: #F57C00;
+            }
+            QPushButton:pressed {
+                background-color: #E65100;
+            }
+        """)
+        
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.setMaximumWidth(80)
         self.refresh_button.setMaximumHeight(28)
@@ -310,6 +335,7 @@ class MainWindow(QMainWindow):
             }}
         """)
         toolbar.addWidget(self.add_module_button)
+        toolbar.addWidget(self.workflow_button)
         toolbar.addWidget(self.refresh_button)
         
         # Bottone impostazioni
@@ -430,11 +456,70 @@ class MainWindow(QMainWindow):
         details_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         right_layout.addWidget(details_label)
 
-        # Nome script
+        # Nome script con icona campana
+        script_name_layout = QHBoxLayout()
+        
         self.script_name_label = QLabel("Seleziona uno script")
         self.script_name_label.setFont(QFont("Arial", 11, QFont.Weight.Bold))
         self.script_name_label.setStyleSheet(f"color: {self.config.primary_color};")
-        right_layout.addWidget(self.script_name_label)
+        script_name_layout.addWidget(self.script_name_label)
+        
+        # Icona notifica email (campana)
+        self.email_notification_button = QPushButton("🔕")
+        self.email_notification_button.setEnabled(False)
+        self.email_notification_button.setFixedSize(28, 28)
+        self.email_notification_button.setToolTip("Configura notifica email per questa esecuzione")
+        self.email_notification_button.clicked.connect(self.configure_email_notification)
+        self.email_notification_button.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                font-size: 16px;
+                padding: 0px;
+            }
+            QPushButton:hover:enabled {
+                background-color: #f0f0f0;
+            }
+            QPushButton:pressed:enabled {
+                background-color: #e0e0e0;
+            }
+            QPushButton:disabled {
+                opacity: 0.5;
+            }
+        """)
+        script_name_layout.addWidget(self.email_notification_button)
+        
+        # Icona schedulazione (orologio)
+        self.schedule_button = QPushButton("⏰")
+        self.schedule_button.setEnabled(False)
+        self.schedule_button.setFixedSize(28, 28)
+        self.schedule_button.setToolTip("Schedula esecuzione automatica script")
+        self.schedule_button.clicked.connect(self.configure_schedule)
+        self.schedule_button.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                font-size: 16px;
+                padding: 0px;
+            }
+            QPushButton:hover:enabled {
+                background-color: #f0f0f0;
+            }
+            QPushButton:pressed:enabled {
+                background-color: #e0e0e0;
+            }
+            QPushButton:disabled {
+                opacity: 0.5;
+            }
+        """)
+        script_name_layout.addWidget(self.schedule_button)
+        script_name_layout.addStretch()
+        
+        right_layout.addLayout(script_name_layout)
+        
+        # Flag per tracciare configurazioni
+        self.email_config = None
+        self.schedule_config = None
 
         # Descrizione
         self.description_label = QLabel("")
@@ -849,7 +934,53 @@ class MainWindow(QMainWindow):
             self.exec_button.setEnabled(True)
             self.doc_button.setEnabled(True)
             self.view_code_button.setEnabled(True)
+            self.email_notification_button.setEnabled(True)
+            self.schedule_button.setEnabled(True)
             self.output_text.clear()
+            
+            # Reset configurazioni quando si seleziona un nuovo script
+            self.email_config = None
+            self.schedule_config = None
+            
+            # Carica configurazioni esistenti e aggiorna icone
+            script_name = self.current_script.get('name', 'Script')
+            
+            # Carica e mostra schedulazione esistente
+            existing_schedule = self.load_schedule_config(script_name)
+            if existing_schedule and existing_schedule.get('enabled'):
+                self.schedule_config = existing_schedule
+                self.schedule_button.setText("⏰")
+                self.schedule_button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #FFF9C4;
+                        border: none;
+                        font-size: 16px;
+                        padding: 0px;
+                    }
+                    QPushButton:hover:enabled {
+                        background-color: #FFF59D;
+                    }
+                    QPushButton:pressed:enabled {
+                        background-color: #FFF176;
+                    }
+                """)
+            else:
+                # Ripristina icona normale
+                self.schedule_button.setText("⏰")
+                self.schedule_button.setStyleSheet("""
+                    QPushButton {
+                        background-color: transparent;
+                        border: none;
+                        font-size: 16px;
+                        padding: 0px;
+                    }
+                    QPushButton:hover:enabled {
+                        background-color: #f0f0f0;
+                    }
+                    QPushButton:pressed:enabled {
+                        background-color: #e0e0e0;
+                    }
+                """)
 
     def execute_script(self):
         """Esegue lo script selezionato"""
@@ -1107,6 +1238,14 @@ class MainWindow(QMainWindow):
         if not self.current_script:
             return
 
+        # Overlay scuro
+        overlay = QWidget(self)
+        overlay.setGeometry(self.rect())
+        overlay.setStyleSheet("background-color: rgba(0, 0, 0, 120);")
+        overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        overlay.show()
+        overlay.raise_()
+
         # Costruisci il percorso del file MD
         doc_filename = self.current_script['name'].replace(" ", "_").lower() + ".md"
         doc_path = self.config.docs_dir / self.current_category.lower() / doc_filename
@@ -1116,18 +1255,39 @@ class MainWindow(QMainWindow):
             doc_path = self.config.docs_dir / f"{self.current_script['name']}.md"
 
         dialog = DocumentationViewer(self.current_script['name'], str(doc_path), self)
-        dialog.exec()
+        dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+        
+        # Centra il dialog
+        dialog.adjustSize()
+        parent_center = self.frameGeometry().center()
+        dialog_rect = dialog.frameGeometry()
+        dialog_rect.moveCenter(parent_center)
+        dialog.move(dialog_rect.topLeft())
+        
+        try:
+            dialog.exec()
+        finally:
+            overlay.deleteLater()
     
     def show_script_code(self):
         """Mostra il contenuto del file di script selezionato"""
         if not self.current_script:
             return
         
+        # Overlay scuro
+        overlay = QWidget(self)
+        overlay.setGeometry(self.rect())
+        overlay.setStyleSheet("background-color: rgba(0, 0, 0, 120);")
+        overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        overlay.show()
+        overlay.raise_()
+        
         # Costruisci il percorso del file script
         script_path = self.current_script.get('path', '')
         script_file_path = Path(self.config.scripts_dir) / script_path
         
         if not script_file_path.exists():
+            overlay.deleteLater()
             msg_box = QMessageBox(self)
             msg_box.setIcon(QMessageBox.Icon.Warning)
             msg_box.setWindowTitle("Errore")
@@ -1140,7 +1300,261 @@ class MainWindow(QMainWindow):
         # Apri il dialog per visualizzare il codice
         filename = script_path.split('/')[-1] if '/' in script_path else script_path
         dialog = ScriptCodeViewer(filename, str(script_file_path), self)
-        dialog.exec()
+        dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+        
+        # Centra il dialog
+        dialog.adjustSize()
+        parent_center = self.frameGeometry().center()
+        dialog_rect = dialog.frameGeometry()
+        dialog_rect.moveCenter(parent_center)
+        dialog.move(dialog_rect.topLeft())
+        
+        try:
+            dialog.exec()
+        finally:
+            overlay.deleteLater()
+    
+    def configure_email_notification(self):
+        """Apre il dialog per configurare la notifica email"""
+        if not self.current_script:
+            return
+        
+        # Overlay scuro
+        overlay = QWidget(self)
+        overlay.setGeometry(self.rect())
+        overlay.setStyleSheet("background-color: rgba(0, 0, 0, 120);")
+        overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        overlay.show()
+        overlay.raise_()
+        
+        # Apri il dialog di configurazione email
+        dialog = EmailConfigDialog(self, self.config)
+        dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+        
+        # Se c'era già una configurazione, ripristinala
+        if self.email_config and self.email_config.get('enabled'):
+            dialog.recipients_input.setText(", ".join(self.email_config.get('recipients', [])))
+            dialog.subject_input.setText(self.email_config.get('subject', ''))
+            dialog.body_input.setPlainText(self.email_config.get('body', ''))
+        
+        # Centra il dialog
+        dialog.adjustSize()
+        parent_center = self.frameGeometry().center()
+        dialog_rect = dialog.frameGeometry()
+        dialog_rect.moveCenter(parent_center)
+        dialog.move(dialog_rect.topLeft())
+        
+        try:
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self.email_config = dialog.email_config
+                # Cambia l'icona della campana se l'email è abilitata
+                if self.email_config and self.email_config.get('enabled'):
+                    self.email_notification_button.setText("🔔")
+                    self.email_notification_button.setStyleSheet("""
+                        QPushButton {
+                            background-color: transparent;
+                            border: none;
+                            font-size: 16px;
+                            padding: 0px;
+                        }
+                        QPushButton:hover:enabled {
+                            background-color: #FFE0B2;
+                        }
+                        QPushButton:pressed:enabled {
+                            background-color: #FFCC80;
+                        }
+                    """)
+                    # Messaggio di conferma
+                    num_recipients = len(self.email_config.get('recipients', []))
+                    self.output_text.append(f"\n✅ Notifica email ATTIVATA per questa esecuzione")
+                    self.output_text.append(f"📧 Destinatari: {num_recipients}")
+                else:
+                    # Ripristina campana disattivata
+                    self.email_notification_button.setText("🔕")
+                    self.email_notification_button.setStyleSheet("""
+                        QPushButton {
+                            background-color: transparent;
+                            border: none;
+                            font-size: 16px;
+                            padding: 0px;
+                        }
+                        QPushButton:hover:enabled {
+                            background-color: #f0f0f0;
+                        }
+                        QPushButton:pressed:enabled {
+                            background-color: #e0e0e0;
+                        }
+                        QPushButton:disabled {
+                            opacity: 0.5;
+                        }
+                    """)
+                    self.output_text.append(f"\n🔕 Notifica email DISATTIVATA")
+        finally:
+            overlay.deleteLater()
+    
+    def configure_schedule(self):
+        """Apre il dialog per configurare la schedulazione automatica"""
+        if not self.current_script:
+            return
+        
+        # Overlay scuro
+        overlay = QWidget(self)
+        overlay.setGeometry(self.rect())
+        overlay.setStyleSheet("background-color: rgba(0, 0, 0, 120);")
+        overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        overlay.show()
+        overlay.raise_()
+        
+        # Carica configurazione esistente se presente
+        script_name = self.current_script.get('name', 'Script')
+        existing_config = self.load_schedule_config(script_name)
+        
+        # Apri il dialog di schedulazione
+        dialog = ScheduleDialog(self, script_name, existing_config)
+        dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+        
+        # Centra il dialog
+        dialog.adjustSize()
+        parent_center = self.frameGeometry().center()
+        dialog_rect = dialog.frameGeometry()
+        dialog_rect.moveCenter(parent_center)
+        dialog.move(dialog_rect.topLeft())
+        
+        try:
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self.schedule_config = dialog.schedule_config
+                
+                # Gestisci eliminazione totale
+                if self.schedule_config and self.schedule_config.get('delete_all'):
+                    self.delete_schedule_config(script_name)
+                    self.schedule_config = None
+                    # Ripristina icona normale
+                    self.schedule_button.setText("⏰")
+                    self.schedule_button.setStyleSheet("""
+                        QPushButton {
+                            background-color: transparent;
+                            border: none;
+                            font-size: 16px;
+                            padding: 0px;
+                        }
+                        QPushButton:hover:enabled {
+                            background-color: #f0f0f0;
+                        }
+                        QPushButton:pressed:enabled {
+                            background-color: #e0e0e0;
+                        }
+                    """)
+                    self.output_text.append(f"\n❌ Schedulazione ELIMINATA per lo script '{script_name}'")
+                # Salva configurazione
+                elif self.schedule_config and self.schedule_config.get('enabled'):
+                    self.save_schedule_config(script_name, self.schedule_config)
+                    # Cambia l'icona se lo scheduling è abilitato
+                    self.schedule_button.setText("⏰")
+                    self.schedule_button.setStyleSheet("""
+                        QPushButton {
+                            background-color: #FFF9C4;
+                            border: none;
+                            font-size: 16px;
+                            padding: 0px;
+                        }
+                        QPushButton:hover:enabled {
+                            background-color: #FFF59D;
+                        }
+                        QPushButton:pressed:enabled {
+                            background-color: #FFF176;
+                        }
+                    """)
+                    # Messaggio di conferma
+                    num_triggers = len(self.schedule_config.get('triggers', []))
+                    self.output_text.append(f"\n✅ Schedulazione SALVATA")
+                    self.output_text.append(f"📝 Task: {self.schedule_config.get('task_name', '')}")
+                    self.output_text.append(f"⏰ Trigger configurati: {num_triggers}")
+        finally:
+            overlay.deleteLater()
+    
+    def get_schedules_dir(self):
+        """Restituisce il percorso della directory schedules"""
+        import os
+        import sys
+        
+        # Se eseguito come eseguibile PyInstaller
+        if getattr(sys, 'frozen', False):
+            # Cerca nella directory dell'eseguibile
+            exe_dir = Path(sys.executable).parent
+            schedules_dir = exe_dir / "schedules"
+        else:
+            # Se eseguito come script Python, usa la directory del progetto
+            base_dir = Path(__file__).parent.parent.parent
+            schedules_dir = base_dir / "schedules"
+        
+        # Crea la directory se non esiste
+        schedules_dir.mkdir(exist_ok=True)
+        return schedules_dir
+    
+    def get_schedule_filepath(self, script_name):
+        """Restituisce il percorso del file JSON per lo script"""
+        safe_name = script_name.replace(' ', '_').replace('/', '_').replace('\\', '_')
+        return self.get_schedules_dir() / f"{safe_name}.json"
+    
+    def save_schedule_config(self, script_name, config):
+        """Salva la configurazione di scheduling in un file JSON"""
+        import json
+        filepath = self.get_schedule_filepath(script_name)
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+            self.output_text.append(f"💾 Configurazione salvata in: {filepath}")
+        except Exception as e:
+            self.output_text.append(f"❌ Errore nel salvataggio: {e}")
+    
+    def load_schedule_config(self, script_name):
+        """Carica la configurazione di scheduling da file JSON"""
+        import json
+        filepath = self.get_schedule_filepath(script_name)
+        if filepath.exists():
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                return config
+            except Exception as e:
+                self.output_text.append(f"⚠️ Errore nel caricamento schedulazione: {e}")
+        return None
+    
+    def delete_schedule_config(self, script_name):
+        """Elimina il file di configurazione scheduling"""
+        filepath = self.get_schedule_filepath(script_name)
+        if filepath.exists():
+            try:
+                filepath.unlink()
+                self.output_text.append(f"🗑️ File configurazione eliminato: {filepath}")
+            except Exception as e:
+                self.output_text.append(f"❌ Errore nell'eliminazione: {e}")
+    
+    def on_workflow_clicked(self):
+        """Apre il dialog per gestire i workflow"""
+        # Overlay scuro
+        overlay = QWidget(self)
+        overlay.setGeometry(self.rect())
+        overlay.setStyleSheet("background-color: rgba(0, 0, 0, 120);")
+        overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        overlay.show()
+        overlay.raise_()
+        
+        # Apri il dialog di gestione workflow
+        dialog = WorkflowManagerDialog(self)
+        dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+        
+        # Centra il dialog
+        dialog.adjustSize()
+        parent_center = self.frameGeometry().center()
+        dialog_rect = dialog.frameGeometry()
+        dialog_rect.moveCenter(parent_center)
+        dialog.move(dialog_rect.topLeft())
+        
+        try:
+            dialog.exec()
+        finally:
+            overlay.deleteLater()
     
     def on_add_module_clicked(self):
         """Apre il dialog per aggiungere un nuovo modulo"""
@@ -1715,6 +2129,7 @@ class AddScriptDialog(QDialog):
         self.setWindowTitle("Aggiungi Nuovo Script")
         width, height = self.config.add_script_dialog_size
         self.resize(width, height)
+        self.setMinimumWidth(800)
         
         # Centra rispetto al parent
         if self.parent():
@@ -1849,7 +2264,6 @@ class AddScriptDialog(QDialog):
         
         self.code_input = QTextEdit()
         self.code_input.setPlaceholderText("Incolla qui il codice del tuo script...\n\nSe lasci vuoto, verrà creato un template base.")
-        self.code_input.setMinimumHeight(200)
         layout.addWidget(self.code_input)
         
         # Buttons
@@ -1996,6 +2410,7 @@ class EditScriptDialog(QDialog):
         self.setWindowTitle("Modifica Script")
         width, height = self.config.edit_script_dialog_size
         self.resize(width, height)
+        self.setMinimumWidth(800)
         
         # Centra rispetto al parent
         if self.parent():
@@ -2205,7 +2620,6 @@ class EditScriptDialog(QDialog):
                 self.code_input.setPlainText(script_file_path.read_text(encoding='utf-8'))
         except Exception:
             pass
-        self.code_input.setMinimumHeight(250)
         layout.addWidget(self.code_input)
         
         # Buttons
@@ -2727,8 +3141,11 @@ class ScriptCodeViewer(QDialog):
     """Dialog per visualizzare il codice di uno script"""
     def __init__(self, title, script_path, parent=None):
         super().__init__(parent)
+        from config.config import ConfigManager
+        self.config = ConfigManager()
         self.setWindowTitle(f"Codice Script - {title}")
-        self.setGeometry(100, 100, 900, 600)
+        width, height = self.config.code_viewer_dialog_size
+        self.resize(width, height)
 
         layout = QVBoxLayout()
         
@@ -2762,3 +3179,1628 @@ class ScriptCodeViewer(QDialog):
         layout.addWidget(buttons)
 
         self.setLayout(layout)
+
+
+class WorkflowManagerDialog(QDialog):
+    """Dialog principale per gestire i workflow"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent_window = parent
+        self.workflows = []
+        self.initUI()
+        self.load_workflows()
+    
+    def initUI(self):
+        self.setWindowTitle("Gestione Workflow")
+        self.resize(700, 500)
+        
+        # Centra rispetto al parent
+        if self.parent():
+            parent_geo = self.parent().frameGeometry()
+            dialog_geo = self.frameGeometry()
+            x = parent_geo.x() + (parent_geo.width() - dialog_geo.width()) // 2
+            y = parent_geo.y() + (parent_geo.height() - dialog_geo.height()) // 2
+            self.move(x, y)
+        
+        self.setStyleSheet("""
+            QDialog {
+                background-color: white;
+            }
+            QLabel {
+                color: black;
+                font-size: 10pt;
+            }
+            QListWidget {
+                background-color: #f9f9f9;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                color: black;
+                font-size: 10pt;
+                padding: 5px;
+            }
+            QListWidget::item {
+                padding: 10px;
+                border-bottom: 1px solid #e0e0e0;
+            }
+            QListWidget::item:selected {
+                background-color: #2196F3;
+                color: white;
+            }
+            QListWidget::item:hover {
+                background-color: #e3f2fd;
+            }
+        """)
+        
+        from PyQt6.QtWidgets import QPushButton
+        
+        layout = QVBoxLayout()
+        
+        # Titolo
+        title_label = QLabel("🔄 Gestione Workflow")
+        title_label.setStyleSheet("font-weight: bold; font-size: 12pt; color: #FF9800; padding-bottom: 10px;")
+        layout.addWidget(title_label)
+        
+        # Descrizione
+        desc_label = QLabel("I workflow permettono di eseguire più script in sequenza.\nSeleziona un workflow per modificarlo o eliminarlo.")
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet("color: #666666; padding-bottom: 10px;")
+        layout.addWidget(desc_label)
+        
+        # Lista workflow
+        self.workflow_list = QListWidget()
+        self.workflow_list.itemSelectionChanged.connect(self.on_workflow_selected)
+        layout.addWidget(self.workflow_list)
+        
+        # Bottoni azione
+        buttons_layout = QHBoxLayout()
+        
+        self.create_btn = QPushButton("➕ Nuovo Workflow")
+        self.create_btn.clicked.connect(self.create_workflow)
+        self.create_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                padding: 8px 16px;
+                border: none;
+                border-radius: 4px;
+                font-size: 10pt;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        buttons_layout.addWidget(self.create_btn)
+        
+        self.edit_btn = QPushButton("✏️ Modifica")
+        self.edit_btn.clicked.connect(self.edit_workflow)
+        self.edit_btn.setEnabled(False)
+        self.edit_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                padding: 8px 16px;
+                border: none;
+                border-radius: 4px;
+                font-size: 10pt;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        buttons_layout.addWidget(self.edit_btn)
+        
+        self.delete_btn = QPushButton("🗑️ Elimina")
+        self.delete_btn.clicked.connect(self.delete_workflow)
+        self.delete_btn.setEnabled(False)
+        self.delete_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                padding: 8px 16px;
+                border: none;
+                border-radius: 4px;
+                font-size: 10pt;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #da190b;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        buttons_layout.addWidget(self.delete_btn)
+        
+        buttons_layout.addStretch()
+        layout.addLayout(buttons_layout)
+        
+        # Bottone chiudi
+        close_layout = QHBoxLayout()
+        close_layout.addStretch()
+        
+        close_btn = QPushButton("Chiudi")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #757575;
+                color: white;
+                padding: 8px 20px;
+                border: none;
+                border-radius: 4px;
+                font-size: 10pt;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #616161;
+            }
+        """)
+        close_layout.addWidget(close_btn)
+        
+        layout.addLayout(close_layout)
+        
+        self.setLayout(layout)
+    
+    def get_workflows_dir(self):
+        """Restituisce il percorso della directory workflows"""
+        import os
+        import sys
+        
+        if getattr(sys, 'frozen', False):
+            exe_dir = Path(sys.executable).parent
+            workflows_dir = exe_dir / "workflows"
+        else:
+            base_dir = Path(__file__).parent.parent.parent
+            workflows_dir = base_dir / "workflows"
+        
+        workflows_dir.mkdir(exist_ok=True)
+        return workflows_dir
+    
+    def load_workflows(self):
+        """Carica tutti i workflow dalla directory"""
+        import json
+        
+        self.workflow_list.clear()
+        self.workflows = []
+        
+        workflows_dir = self.get_workflows_dir()
+        for file in workflows_dir.glob("*.json"):
+            try:
+                with open(file, 'r', encoding='utf-8') as f:
+                    workflow_data = json.load(f)
+                    workflow_data['filename'] = file.name
+                    self.workflows.append(workflow_data)
+                    
+                    # Aggiungi alla lista con formato: Nome (N script)
+                    script_count = len(workflow_data.get('scripts', []))
+                    item_text = f"📋 {workflow_data['name']} ({script_count} script)"
+                    self.workflow_list.addItem(item_text)
+            except Exception as e:
+                print(f"Errore caricamento workflow {file}: {e}")
+    
+    def on_workflow_selected(self):
+        """Abilita/disabilita bottoni in base alla selezione"""
+        has_selection = len(self.workflow_list.selectedItems()) > 0
+        self.edit_btn.setEnabled(has_selection)
+        self.delete_btn.setEnabled(has_selection)
+    
+    def create_workflow(self):
+        """Apre il dialog per creare un nuovo workflow"""
+        dialog = WorkflowEditorDialog(self, parent_window=self.parent_window)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            workflow_data = dialog.get_workflow_data()
+            if workflow_data:
+                self.save_workflow(workflow_data)
+                self.load_workflows()
+    
+    def edit_workflow(self):
+        """Apre il dialog per modificare il workflow selezionato"""
+        selected_index = self.workflow_list.currentRow()
+        if 0 <= selected_index < len(self.workflows):
+            workflow_data = self.workflows[selected_index]
+            dialog = WorkflowEditorDialog(self, existing_workflow=workflow_data, parent_window=self.parent_window)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                new_data = dialog.get_workflow_data()
+                if new_data:
+                    # Elimina il vecchio file se il nome è cambiato
+                    if workflow_data.get('filename'):
+                        old_file = self.get_workflows_dir() / workflow_data['filename']
+                        if old_file.exists() and new_data['name'] != workflow_data['name']:
+                            old_file.unlink()
+                    
+                    self.save_workflow(new_data)
+                    self.load_workflows()
+    
+    def delete_workflow(self):
+        """Elimina il workflow selezionato"""
+        selected_index = self.workflow_list.currentRow()
+        if 0 <= selected_index < len(self.workflows):
+            from PyQt6.QtWidgets import QMessageBox
+            
+            workflow_data = self.workflows[selected_index]
+            
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setWindowTitle("Conferma")
+            msg.setText(f"Eliminare il workflow '{workflow_data['name']}'?")
+            msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QLabel {
+                    color: black;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #f44336;
+                    color: white;
+                    padding: 6px 16px;
+                    border: none;
+                    border-radius: 4px;
+                    min-width: 80px;
+                }
+                QPushButton:hover {
+                    background-color: #da190b;
+                }
+            """)
+            reply = msg.exec()
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                if workflow_data.get('filename'):
+                    file_path = self.get_workflows_dir() / workflow_data['filename']
+                    if file_path.exists():
+                        file_path.unlink()
+                        self.load_workflows()
+    
+    def save_workflow(self, workflow_data):
+        """Salva il workflow su file JSON"""
+        import json
+        
+        safe_name = workflow_data['name'].replace(' ', '_').replace('/', '_').replace('\\', '_')
+        filename = f"{safe_name}.json"
+        filepath = self.get_workflows_dir() / filename
+        
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(workflow_data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Errore", f"Impossibile salvare il workflow:\n{e}")
+
+
+class WorkflowEditorDialog(QDialog):
+    """Dialog per creare/modificare un workflow"""
+    def __init__(self, parent=None, existing_workflow=None, parent_window=None):
+        super().__init__(parent)
+        self.existing_workflow = existing_workflow
+        self.parent_window = parent_window
+        self.workflow_data = None
+        self.selected_scripts = []
+        self.initUI()
+        
+        if existing_workflow:
+            self.load_existing_workflow()
+    
+    def initUI(self):
+        self.setWindowTitle("Editor Workflow")
+        self.resize(900, 600)
+        
+        # Centra rispetto al parent
+        if self.parent():
+            parent_geo = self.parent().frameGeometry()
+            dialog_geo = self.frameGeometry()
+            x = parent_geo.x() + (parent_geo.width() - dialog_geo.width()) // 2
+            y = parent_geo.y() + (parent_geo.height() - dialog_geo.height()) // 2
+            self.move(x, y)
+        
+        self.setStyleSheet("""
+            QDialog {
+                background-color: white;
+            }
+            QLabel {
+                color: black;
+                font-size: 10pt;
+            }
+            QLineEdit {
+                background-color: #f5f5f5;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                padding: 8px;
+                color: black;
+                font-size: 10pt;
+            }
+            QLineEdit:focus {
+                border: 2px solid #FF9800;
+                background-color: white;
+            }
+            QListWidget {
+                background-color: #f9f9f9;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                color: black;
+                font-size: 10pt;
+                padding: 5px;
+            }
+            QListWidget::item {
+                padding: 8px;
+                border-bottom: 1px solid #e0e0e0;
+            }
+            QListWidget::item:selected {
+                background-color: #FF9800;
+                color: white;
+            }
+            QListWidget::item:hover {
+                background-color: #FFE0B2;
+            }
+        """)
+        
+        from PyQt6.QtWidgets import QPushButton
+        
+        layout = QVBoxLayout()
+        
+        # Titolo
+        title = "✏️ Modifica Workflow" if self.existing_workflow else "➕ Nuovo Workflow"
+        title_label = QLabel(title)
+        title_label.setStyleSheet("font-weight: bold; font-size: 12pt; color: #FF9800; padding-bottom: 10px;")
+        layout.addWidget(title_label)
+        
+        # Nome workflow
+        name_label = QLabel("Nome Workflow:")
+        name_label.setStyleSheet("font-weight: bold;")
+        layout.addWidget(name_label)
+        
+        self.name_input = QLineEdit()
+        self.name_input.setPlaceholderText("Inserisci un nome per il workflow...")
+        layout.addWidget(self.name_input)
+        
+        # Layout orizzontale per liste
+        lists_layout = QHBoxLayout()
+        
+        # Lista script disponibili (sinistra)
+        left_panel = QVBoxLayout()
+        available_label = QLabel("📚 Script Disponibili")
+        available_label.setStyleSheet("font-weight: bold; padding-top: 10px;")
+        left_panel.addWidget(available_label)
+        
+        self.available_list = QListWidget()
+        self.available_list.itemDoubleClicked.connect(self.add_script_to_workflow)
+        left_panel.addWidget(self.available_list)
+        
+        lists_layout.addLayout(left_panel, 1)
+        
+        # Bottoni centrali
+        center_buttons = QVBoxLayout()
+        center_buttons.addStretch()
+        
+        add_btn = QPushButton("▶")
+        add_btn.setMaximumWidth(50)
+        add_btn.clicked.connect(self.add_script_to_workflow)
+        add_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FF9800;
+                color: white;
+                padding: 10px;
+                border: none;
+                border-radius: 4px;
+                font-size: 14pt;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #F57C00;
+            }
+        """)
+        center_buttons.addWidget(add_btn)
+        
+        remove_btn = QPushButton("◀")
+        remove_btn.setMaximumWidth(50)
+        remove_btn.clicked.connect(self.remove_script_from_workflow)
+        remove_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #757575;
+                color: white;
+                padding: 10px;
+                border: none;
+                border-radius: 4px;
+                font-size: 14pt;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #616161;
+            }
+        """)
+        center_buttons.addWidget(remove_btn)
+        
+        center_buttons.addStretch()
+        lists_layout.addLayout(center_buttons)
+        
+        # Lista script nel workflow (destra)
+        right_panel = QVBoxLayout()
+        workflow_label = QLabel("🔄 Script nel Workflow")
+        workflow_label.setStyleSheet("font-weight: bold; padding-top: 10px;")
+        right_panel.addWidget(workflow_label)
+        
+        self.workflow_list = QListWidget()
+        right_panel.addWidget(self.workflow_list)
+        
+        # Bottoni ordinamento
+        order_buttons = QHBoxLayout()
+        
+        up_btn = QPushButton("⬆ Su")
+        up_btn.clicked.connect(self.move_script_up)
+        up_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                padding: 5px 10px;
+                border: none;
+                border-radius: 4px;
+                font-size: 9pt;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+        """)
+        order_buttons.addWidget(up_btn)
+        
+        down_btn = QPushButton("⬇ Giù")
+        down_btn.clicked.connect(self.move_script_down)
+        down_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                padding: 5px 10px;
+                border: none;
+                border-radius: 4px;
+                font-size: 9pt;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+        """)
+        order_buttons.addWidget(down_btn)
+        
+        right_panel.addLayout(order_buttons)
+        lists_layout.addLayout(right_panel, 1)
+        
+        layout.addLayout(lists_layout)
+        
+        # Bottoni finali
+        final_buttons = QHBoxLayout()
+        final_buttons.addStretch()
+        
+        cancel_btn = QPushButton("Annulla")
+        cancel_btn.clicked.connect(self.reject)
+        cancel_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #757575;
+                color: white;
+                padding: 8px 20px;
+                border: none;
+                border-radius: 4px;
+                font-size: 10pt;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #616161;
+            }
+        """)
+        final_buttons.addWidget(cancel_btn)
+        
+        save_btn = QPushButton("Salva")
+        save_btn.clicked.connect(self.accept)
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                padding: 8px 20px;
+                border: none;
+                border-radius: 4px;
+                font-size: 10pt;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        final_buttons.addWidget(save_btn)
+        
+        layout.addLayout(final_buttons)
+        
+        self.setLayout(layout)
+        
+        # Carica gli script disponibili
+        self.load_available_scripts()
+    
+    def load_available_scripts(self):
+        """Carica tutti gli script disponibili dall'applicazione"""
+        if not self.parent_window or not hasattr(self.parent_window, 'repository'):
+            return
+        
+        all_scripts = self.parent_window.repository.get_all_scripts()
+        
+        for script in all_scripts:
+            script_name = script.get('name', 'Unknown')
+            category = script.get('category', 'N/A')
+            item_text = f"{script_name} ({category})"
+            self.available_list.addItem(item_text)
+    
+    def load_existing_workflow(self):
+        """Carica i dati di un workflow esistente"""
+        if not self.existing_workflow:
+            return
+        
+        self.name_input.setText(self.existing_workflow.get('name', ''))
+        
+        # Carica gli script nel workflow
+        for script_info in self.existing_workflow.get('scripts', []):
+            self.workflow_list.addItem(script_info)
+            self.selected_scripts.append(script_info)
+    
+    def add_script_to_workflow(self):
+        """Aggiunge uno script al workflow"""
+        selected_items = self.available_list.selectedItems()
+        if selected_items:
+            script_text = selected_items[0].text()
+            if script_text not in self.selected_scripts:
+                self.workflow_list.addItem(script_text)
+                self.selected_scripts.append(script_text)
+    
+    def remove_script_from_workflow(self):
+        """Rimuove uno script dal workflow"""
+        selected_items = self.workflow_list.selectedItems()
+        if selected_items:
+            for item in selected_items:
+                script_text = item.text()
+                row = self.workflow_list.row(item)
+                self.workflow_list.takeItem(row)
+                if script_text in self.selected_scripts:
+                    self.selected_scripts.remove(script_text)
+    
+    def move_script_up(self):
+        """Sposta lo script selezionato verso l'alto"""
+        current_row = self.workflow_list.currentRow()
+        if current_row > 0:
+            item = self.workflow_list.takeItem(current_row)
+            self.workflow_list.insertItem(current_row - 1, item)
+            self.workflow_list.setCurrentRow(current_row - 1)
+            
+            # Aggiorna la lista interna
+            self.selected_scripts[current_row], self.selected_scripts[current_row - 1] = \
+                self.selected_scripts[current_row - 1], self.selected_scripts[current_row]
+    
+    def move_script_down(self):
+        """Sposta lo script selezionato verso il basso"""
+        current_row = self.workflow_list.currentRow()
+        if current_row < self.workflow_list.count() - 1:
+            item = self.workflow_list.takeItem(current_row)
+            self.workflow_list.insertItem(current_row + 1, item)
+            self.workflow_list.setCurrentRow(current_row + 1)
+            
+            # Aggiorna la lista interna
+            self.selected_scripts[current_row], self.selected_scripts[current_row + 1] = \
+                self.selected_scripts[current_row + 1], self.selected_scripts[current_row]
+    
+    def accept(self):
+        """Valida e salva il workflow"""
+        name = self.name_input.text().strip()
+        
+        if not name:
+            from PyQt6.QtWidgets import QMessageBox
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setWindowTitle("Attenzione")
+            msg.setText("Inserisci un nome per il workflow!")
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QLabel {
+                    color: black;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #FF9800;
+                    color: white;
+                    padding: 6px 16px;
+                    border: none;
+                    border-radius: 4px;
+                    min-width: 80px;
+                }
+                QPushButton:hover {
+                    background-color: #F57C00;
+                }
+            """)
+            msg.exec()
+            return
+        
+        if not self.selected_scripts:
+            from PyQt6.QtWidgets import QMessageBox
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setWindowTitle("Attenzione")
+            msg.setText("Aggiungi almeno uno script al workflow!")
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QLabel {
+                    color: black;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #FF9800;
+                    color: white;
+                    padding: 6px 16px;
+                    border: none;
+                    border-radius: 4px;
+                    min-width: 80px;
+                }
+                QPushButton:hover {
+                    background-color: #F57C00;
+                }
+            """)
+            msg.exec()
+            return
+        
+        # Aggiorna la lista degli script dal QListWidget per mantenere l'ordine corrente
+        self.selected_scripts = [self.workflow_list.item(i).text() for i in range(self.workflow_list.count())]
+        
+        self.workflow_data = {
+            'name': name,
+            'scripts': self.selected_scripts
+        }
+        
+        super().accept()
+    
+    def get_workflow_data(self):
+        """Restituisce i dati del workflow"""
+        return self.workflow_data
+
+
+class EmailConfigDialog(QDialog):
+    """Dialog per configurare l'invio email al termine dell'esecuzione"""
+    def __init__(self, parent=None, config_manager=None):
+        super().__init__(parent)
+        self.config = config_manager
+        self.email_config = None
+        self.initUI()
+    
+    def initUI(self):
+        self.setWindowTitle("Configura Notifica Email")
+        self.resize(600, 500)
+        
+        # Centra rispetto al parent
+        if self.parent():
+            parent_geo = self.parent().frameGeometry()
+            dialog_geo = self.frameGeometry()
+            x = parent_geo.x() + (parent_geo.width() - dialog_geo.width()) // 2
+            y = parent_geo.y() + (parent_geo.height() - dialog_geo.height()) // 2
+            self.move(x, y)
+        
+        self.setStyleSheet("""
+            QDialog {
+                background-color: white;
+            }
+            QLabel {
+                color: black;
+                font-size: 10pt;
+            }
+            QLineEdit, QTextEdit {
+                background-color: #f5f5f5;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                padding: 8px;
+                color: black;
+                font-size: 10pt;
+            }
+            QLineEdit:focus, QTextEdit:focus {
+                border: 2px solid #2196F3;
+                background-color: white;
+            }
+            QCheckBox {
+                color: black;
+                font-size: 10pt;
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border: 2px solid #cccccc;
+                border-radius: 3px;
+                background-color: white;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #2196F3;
+                border-color: #2196F3;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        
+        # Titolo
+        title_label = QLabel("Configura report email al termine dell'esecuzione")
+        title_label.setStyleSheet("font-weight: bold; font-size: 11pt; color: #2196F3; padding-bottom: 10px;")
+        layout.addWidget(title_label)
+        
+        # Destinatari
+        recipients_label = QLabel("Destinatari (separati da virgola):")
+        recipients_label.setStyleSheet("font-weight: bold;")
+        layout.addWidget(recipients_label)
+        
+        self.recipients_input = QLineEdit()
+        # Placeholder con valori di esempio dal config
+        placeholder_recipients = "email1@example.com, email2@example.com"
+        if self.config and self.config.default_recipients:
+            placeholder_recipients = ", ".join(self.config.default_recipients)
+        self.recipients_input.setPlaceholderText(placeholder_recipients)
+        layout.addWidget(self.recipients_input)
+        
+        # Oggetto
+        subject_label = QLabel("Oggetto:")
+        subject_label.setStyleSheet("font-weight: bold;")
+        layout.addWidget(subject_label)
+        
+        self.subject_input = QLineEdit()
+        # Placeholder con valore dal config
+        placeholder_subject = "[SYS Toolset] Esecuzione script"
+        if self.config:
+            placeholder_subject = self.config.default_email_subject
+        self.subject_input.setPlaceholderText(placeholder_subject)
+        layout.addWidget(self.subject_input)
+        
+        # Info sui placeholder
+        info_label = QLabel("💡 Puoi usare: {script_name}, {date}, {time}, {status}, {output}")
+        info_label.setStyleSheet("color: #666; font-size: 9pt; font-style: italic;")
+        layout.addWidget(info_label)
+        
+        # Corpo
+        body_label = QLabel("Corpo del messaggio:")
+        body_label.setStyleSheet("font-weight: bold;")
+        layout.addWidget(body_label)
+        
+        self.body_input = QTextEdit()
+        # Placeholder con valore dal config
+        placeholder_body = "Report di esecuzione:\n\n{output}"
+        if self.config:
+            placeholder_body = self.config.default_email_body
+        self.body_input.setPlaceholderText(placeholder_body)
+        self.body_input.setMaximumHeight(150)
+        layout.addWidget(self.body_input)
+        
+        # Info configurazione SMTP
+        info_box = QLabel()
+        if self.config and self.config.sender_email:
+            info_box.setText(f"📧 Mittente configurato: {self.config.sender_email}\n"
+                           f"🖥️ Server SMTP: {self.config.smtp_server}:{self.config.smtp_port}")
+        else:
+            info_box.setText("⚠️ Configurazione SMTP non trovata in config.ini")
+        info_box.setStyleSheet("""
+            background-color: #E3F2FD;
+            border: 1px solid #2196F3;
+            border-radius: 4px;
+            padding: 10px;
+            color: #333;
+            font-size: 9pt;
+        """)
+        layout.addWidget(info_box)
+        
+        layout.addStretch()
+        
+        # Bottoni
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | 
+            QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                padding: 8px 20px;
+                border: none;
+                border-radius: 4px;
+                font-size: 10pt;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:pressed {
+                background-color: #0D47A1;
+            }
+        """)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        
+        self.setLayout(layout)
+    
+    def _validate_email(self, email):
+        """Valida formato email base"""
+        import re
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return re.match(pattern, email) is not None
+    
+    def accept(self):
+        """Salva la configurazione email"""
+        recipients_text = self.recipients_input.text().strip()
+        
+        # Se il campo è vuoto, mostra warning
+        if not recipients_text:
+            from PyQt6.QtWidgets import QMessageBox
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setWindowTitle("Campo obbligatorio")
+            msg.setText("Il campo destinatari è vuoto!")
+            msg.setInformativeText("Inserisci almeno un indirizzo email o premi Cancel per annullare.")
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QLabel {
+                    color: black;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #2196F3;
+                    color: white;
+                    padding: 6px 16px;
+                    border: none;
+                    border-radius: 4px;
+                    min-width: 80px;
+                }
+                QPushButton:hover {
+                    background-color: #1976D2;
+                }
+            """)
+            msg.exec()
+            return  # Non chiudere il dialog
+        
+        # Separa i destinatari
+        recipients = [r.strip() for r in recipients_text.split(',') if r.strip()]
+        
+        # Valida ogni email
+        invalid_emails = []
+        for email in recipients:
+            if not self._validate_email(email):
+                invalid_emails.append(email)
+        
+        # Se ci sono email non valide, mostra errore
+        if invalid_emails:
+            from PyQt6.QtWidgets import QMessageBox
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setWindowTitle("Email non valide")
+            msg.setText(f"Le seguenti email non sono valide:\n\n{', '.join(invalid_emails)}")
+            msg.setInformativeText("Correggi gli indirizzi email e riprova.")
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QLabel {
+                    color: black;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #2196F3;
+                    color: white;
+                    padding: 6px 16px;
+                    border: none;
+                    border-radius: 4px;
+                    min-width: 80px;
+                }
+                QPushButton:hover {
+                    background-color: #1976D2;
+                }
+            """)
+            msg.exec()
+            return  # Non chiudere il dialog
+        
+        # Se tutto ok, salva la configurazione
+        self.email_config = {
+            'enabled': True,
+            'recipients': recipients,
+            'subject': self.subject_input.text(),
+            'body': self.body_input.toPlainText()
+        }
+        
+        super().accept()
+
+
+class ScheduleDialog(QDialog):
+    """Dialog per schedulare l'esecuzione automatica di uno script"""
+    def __init__(self, parent=None, script_name="", existing_config=None):
+        super().__init__(parent)
+        self.script_name = script_name
+        self.existing_config = existing_config
+        self.schedule_config = None
+        self.triggers = existing_config.get('triggers', []) if existing_config else []
+        self.initUI()
+    
+    def initUI(self):
+        self.setWindowTitle(f"Schedula Script - {self.script_name}")
+        self.resize(900, 550)
+        
+        # Centra rispetto al parent
+        if self.parent():
+            parent_geo = self.parent().frameGeometry()
+            dialog_geo = self.frameGeometry()
+            x = parent_geo.x() + (parent_geo.width() - dialog_geo.width()) // 2
+            y = parent_geo.y() + (parent_geo.height() - dialog_geo.height()) // 2
+            self.move(x, y)
+        
+        self.setStyleSheet("""
+            QDialog {
+                background-color: white;
+            }
+            QLabel {
+                color: black;
+                font-size: 10pt;
+            }
+            QLineEdit, QComboBox, QSpinBox, QTimeEdit, QDateTimeEdit {
+                background-color: #f5f5f5;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                padding: 6px;
+                color: black;
+                font-size: 10pt;
+            }
+            QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTimeEdit:focus, QDateTimeEdit:focus {
+                border: 2px solid #2196F3;
+                background-color: white;
+            }
+            QCheckBox {
+                color: black;
+                font-size: 10pt;
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border: 2px solid #cccccc;
+                border-radius: 3px;
+                background-color: white;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #2196F3;
+                border-color: #2196F3;
+            }
+            QRadioButton {
+                color: black;
+                font-size: 10pt;
+                spacing: 8px;
+            }
+            QRadioButton::indicator {
+                width: 16px;
+                height: 16px;
+                border: 2px solid #cccccc;
+                border-radius: 8px;
+                background-color: white;
+            }
+            QRadioButton::indicator:checked {
+                background-color: #2196F3;
+                border-color: #2196F3;
+            }
+            QListWidget {
+                background-color: #f9f9f9;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                color: black;
+                font-size: 10pt;
+            }
+            QListWidget::item:selected {
+                background-color: #2196F3;
+                color: white;
+            }
+            QListWidget::item:hover {
+                background-color: #e3f2fd;
+            }
+        """)
+        
+        from PyQt6.QtWidgets import QRadioButton, QTimeEdit, QSpinBox, QGroupBox, QDateTimeEdit, QListWidget, QPushButton
+        from PyQt6.QtCore import QTime, QDateTime
+        
+        main_layout = QVBoxLayout()
+        
+        # Titolo
+        title_label = QLabel("⏰ Configura schedulazione automatica")
+        title_label.setStyleSheet("font-weight: bold; font-size: 11pt; color: #2196F3; padding-bottom: 10px;")
+        main_layout.addWidget(title_label)
+        
+        # Nome task
+        task_name_label = QLabel("Nome attività:")
+        task_name_label.setStyleSheet("font-weight: bold;")
+        main_layout.addWidget(task_name_label)
+        
+        self.task_name_input = QLineEdit()
+        default_name = f"SYS_Toolset_{self.script_name.replace(' ', '_')}"
+        if self.existing_config:
+            self.task_name_input.setText(self.existing_config.get('task_name', default_name))
+        else:
+            self.task_name_input.setText(default_name)
+        self.task_name_input.setPlaceholderText("Nome univoco per l'attività pianificata")
+        main_layout.addWidget(self.task_name_input)
+        
+        # Layout orizzontale: lista trigger a sinistra, form a destra
+        h_layout = QHBoxLayout()
+        
+        # === PANNELLO SINISTRO: Lista Trigger ===
+        left_panel = QVBoxLayout()
+        
+        triggers_label = QLabel("Trigger configurati:")
+        triggers_label.setStyleSheet("font-weight: bold; padding-top: 10px;")
+        left_panel.addWidget(triggers_label)
+        
+        self.triggers_list = QListWidget()
+        self.triggers_list.setMinimumWidth(250)
+        self.triggers_list.itemSelectionChanged.connect(self.on_trigger_selected)
+        left_panel.addWidget(self.triggers_list)
+        
+        # Bottoni gestione trigger (sinistra)
+        trigger_buttons_layout = QVBoxLayout()
+        
+        self.add_trigger_btn = QPushButton("➕ Nuovo Trigger")
+        self.add_trigger_btn.clicked.connect(self.add_trigger)
+        self.add_trigger_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                padding: 8px;
+                border: none;
+                border-radius: 4px;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        trigger_buttons_layout.addWidget(self.add_trigger_btn)
+        
+        self.delete_trigger_btn = QPushButton("🗑️ Elimina Trigger")
+        self.delete_trigger_btn.clicked.connect(self.delete_trigger)
+        self.delete_trigger_btn.setEnabled(False)
+        self.delete_trigger_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                padding: 8px;
+                border: none;
+                border-radius: 4px;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background-color: #da190b;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        trigger_buttons_layout.addWidget(self.delete_trigger_btn)
+        
+        left_panel.addLayout(trigger_buttons_layout)
+        h_layout.addLayout(left_panel, 1)
+        
+        # === PANNELLO DESTRO: Form Trigger ===
+        right_panel = QVBoxLayout()
+        
+        form_label = QLabel("Dettagli trigger:")
+        form_label.setStyleSheet("font-weight: bold; padding-top: 10px;")
+        right_panel.addWidget(form_label)
+        
+        # Tipo di schedulazione
+        schedule_type_group = QGroupBox("Tipo di schedulazione")
+        schedule_type_layout = QHBoxLayout()
+        
+        self.once_radio = QRadioButton("Una volta")
+        self.once_radio.setChecked(True)
+        self.once_radio.toggled.connect(self.on_schedule_type_changed)
+        schedule_type_layout.addWidget(self.once_radio)
+        
+        self.daily_radio = QRadioButton("Giornaliera")
+        self.daily_radio.toggled.connect(self.on_schedule_type_changed)
+        schedule_type_layout.addWidget(self.daily_radio)
+        
+        self.weekly_radio = QRadioButton("Settimanale")
+        self.weekly_radio.toggled.connect(self.on_schedule_type_changed)
+        schedule_type_layout.addWidget(self.weekly_radio)
+        
+        schedule_type_group.setLayout(schedule_type_layout)
+        right_panel.addWidget(schedule_type_group)
+        
+        # Data e ora
+        datetime_group = QGroupBox("Data e ora esecuzione")
+        datetime_layout = QVBoxLayout()
+        
+        # Data (solo per "una volta")
+        self.date_label = QLabel("Data e ora:")
+        self.date_label.setStyleSheet("font-weight: bold;")
+        datetime_layout.addWidget(self.date_label)
+        
+        self.date_edit = QDateTimeEdit()
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDateTime(QDateTime.currentDateTime())
+        self.date_edit.setDisplayFormat("dd/MM/yyyy HH:mm")
+        datetime_layout.addWidget(self.date_edit)
+        
+        # Ora (per ricorrenze)
+        self.time_label = QLabel("Ora:")
+        self.time_label.setStyleSheet("font-weight: bold;")
+        self.time_label.setVisible(False)
+        datetime_layout.addWidget(self.time_label)
+        
+        self.time_edit = QTimeEdit()
+        self.time_edit.setTime(QTime.currentTime())
+        self.time_edit.setDisplayFormat("HH:mm")
+        self.time_edit.setVisible(False)
+        datetime_layout.addWidget(self.time_edit)
+        
+        datetime_group.setLayout(datetime_layout)
+        right_panel.addWidget(datetime_group)
+        
+        # Giorni settimana (solo per settimanale)
+        self.weekdays_group = QGroupBox("Giorni della settimana")
+        weekdays_layout = QHBoxLayout()
+        
+        self.weekday_checkboxes = {}
+        weekdays = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
+        weekdays_full = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+        for short, full in zip(weekdays, weekdays_full):
+            cb = QCheckBox(short)
+            cb.setToolTip(full)
+            self.weekday_checkboxes[full] = cb
+            weekdays_layout.addWidget(cb)
+        
+        self.weekdays_group.setLayout(weekdays_layout)
+        self.weekdays_group.setVisible(False)
+        right_panel.addWidget(self.weekdays_group)
+        
+        # Intervallo giornaliero
+        self.daily_group = QGroupBox("Ripeti ogni")
+        daily_layout = QHBoxLayout()
+        
+        self.daily_interval = QSpinBox()
+        self.daily_interval.setMinimum(1)
+        self.daily_interval.setMaximum(365)
+        self.daily_interval.setValue(1)
+        daily_layout.addWidget(self.daily_interval)
+        
+        daily_label = QLabel("giorno/i")
+        daily_layout.addWidget(daily_label)
+        daily_layout.addStretch()
+        
+        self.daily_group.setLayout(daily_layout)
+        self.daily_group.setVisible(False)
+        right_panel.addWidget(self.daily_group)
+        
+        right_panel.addStretch()
+        h_layout.addLayout(right_panel, 2)
+        
+        main_layout.addLayout(h_layout)
+        
+        # Bottoni finali
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addStretch()
+        
+        cancel_btn = QPushButton("Annulla")
+        cancel_btn.clicked.connect(self.reject)
+        cancel_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #757575;
+                color: white;
+                padding: 8px 20px;
+                border: none;
+                border-radius: 4px;
+                font-size: 10pt;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #616161;
+            }
+        """)
+        buttons_layout.addWidget(cancel_btn)
+        
+        self.delete_all_btn = QPushButton("Elimina Tutto")
+        self.delete_all_btn.clicked.connect(self.delete_all_triggers)
+        self.delete_all_btn.setVisible(self.existing_config is not None)
+        self.delete_all_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                padding: 8px 20px;
+                border: none;
+                border-radius: 4px;
+                font-size: 10pt;
+                min-width: 100px;
+            }
+            QPushButton:hover {
+                background-color: #da190b;
+            }
+        """)
+        buttons_layout.addWidget(self.delete_all_btn)
+        
+        save_btn = QPushButton("Salva")
+        save_btn.clicked.connect(self.accept)
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                padding: 8px 20px;
+                border: none;
+                border-radius: 4px;
+                font-size: 10pt;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+        """)
+        buttons_layout.addWidget(save_btn)
+        
+        main_layout.addLayout(buttons_layout)
+        
+        self.setLayout(main_layout)
+        
+        # Carica trigger esistenti
+        self.refresh_triggers_list()
+        
+        # Variabile per editing
+        self.editing_trigger_index = None
+    
+    def refresh_triggers_list(self):
+        """Aggiorna la lista dei trigger visualizzati"""
+        self.triggers_list.clear()
+        for trigger in self.triggers:
+            summary = self.get_trigger_summary(trigger)
+            self.triggers_list.addItem(summary)
+    
+    def get_trigger_summary(self, trigger):
+        """Genera un riassunto testuale del trigger"""
+        trigger_type = trigger['type']
+        data = trigger['data']
+        
+        if trigger_type == 'once':
+            return f"📅 Una volta: {data['datetime']}"
+        elif trigger_type == 'daily':
+            interval = data.get('interval', 1)
+            if interval == 1:
+                return f"🔄 Giornaliera: {data['time']}"
+            else:
+                return f"🔄 Ogni {interval} giorni: {data['time']}"
+        elif trigger_type == 'weekly':
+            days_short = {'Lunedì': 'Lun', 'Martedì': 'Mar', 'Mercoledì': 'Mer', 
+                         'Giovedì': 'Gio', 'Venerdì': 'Ven', 'Sabato': 'Sab', 'Domenica': 'Dom'}
+            days = ', '.join([days_short.get(d, d) for d in data['days']])
+            return f"📆 Settimanale: {days} - {data['time']}"
+        return "❓ Sconosciuto"
+    
+    def on_trigger_selected(self):
+        """Gestisce la selezione di un trigger dalla lista"""
+        selected_items = self.triggers_list.selectedItems()
+        if selected_items:
+            self.delete_trigger_btn.setEnabled(True)
+            # Carica il trigger selezionato nel form
+            selected_index = self.triggers_list.currentRow()
+            if 0 <= selected_index < len(self.triggers):
+                self.editing_trigger_index = selected_index
+                self.load_trigger_into_form(self.triggers[selected_index])
+                # Cambia testo bottone in modalità editing
+                self.add_trigger_btn.setText("💾 Salva Modifiche")
+        else:
+            self.delete_trigger_btn.setEnabled(False)
+            self.editing_trigger_index = None
+            self.add_trigger_btn.setText("➕ Nuovo Trigger")
+    
+    def load_trigger_into_form(self, trigger):
+        """Carica i dati di un trigger nel form"""
+        from PyQt6.QtCore import QTime, QDateTime
+        
+        trigger_type = trigger['type']
+        data = trigger['data']
+        
+        if trigger_type == 'once':
+            self.once_radio.setChecked(True)
+            datetime_str = data['datetime']
+            dt = QDateTime.fromString(datetime_str, "dd/MM/yyyy HH:mm")
+            self.date_edit.setDateTime(dt)
+        elif trigger_type == 'daily':
+            self.daily_radio.setChecked(True)
+            time_str = data['time']
+            time = QTime.fromString(time_str, "HH:mm")
+            self.time_edit.setTime(time)
+            self.daily_interval.setValue(data.get('interval', 1))
+        elif trigger_type == 'weekly':
+            self.weekly_radio.setChecked(True)
+            time_str = data['time']
+            time = QTime.fromString(time_str, "HH:mm")
+            self.time_edit.setTime(time)
+            # Reset weekdays
+            for cb in self.weekday_checkboxes.values():
+                cb.setChecked(False)
+            # Set selected days
+            for day in data['days']:
+                if day in self.weekday_checkboxes:
+                    self.weekday_checkboxes[day].setChecked(True)
+
+    
+    def add_trigger(self):
+        """Aggiunge un nuovo trigger alla lista"""
+        # Valida il form
+        trigger = self.get_current_form_trigger()
+        if trigger is None:
+            return  # Validazione fallita
+        
+        if self.editing_trigger_index is not None:
+            # Modalità editing: aggiorna il trigger esistente
+            self.triggers[self.editing_trigger_index] = trigger
+            self.editing_trigger_index = None
+            self.add_trigger_btn.setText("➕ Nuovo Trigger")
+        else:
+            # Modalità inserimento: aggiungi nuovo trigger
+            self.triggers.append(trigger)
+        
+        self.refresh_triggers_list()
+        self.clear_form()
+        self.triggers_list.clearSelection()
+        self.delete_trigger_btn.setEnabled(False)
+    
+    def delete_trigger(self):
+        """Elimina il trigger selezionato"""
+        selected_index = self.triggers_list.currentRow()
+        if 0 <= selected_index < len(self.triggers):
+            from PyQt6.QtWidgets import QMessageBox
+            
+            # Ottieni il riepilogo del trigger prima di eliminarlo
+            trigger_summary = self.get_trigger_summary(self.triggers[selected_index])
+            
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Question)
+            msg.setWindowTitle("Conferma")
+            msg.setText(f"Eliminare questo trigger?\n\n{trigger_summary}")
+            msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QLabel {
+                    color: black;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #2196F3;
+                    color: white;
+                    padding: 6px 16px;
+                    border: none;
+                    border-radius: 4px;
+                    min-width: 80px;
+                }
+                QPushButton:hover {
+                    background-color: #1976D2;
+                }
+            """)
+            reply = msg.exec()
+            if reply == QMessageBox.StandardButton.Yes:
+                self.triggers.pop(selected_index)
+                self.refresh_triggers_list()
+                self.clear_form()
+                self.editing_trigger_index = None
+                
+                # Mostra messaggio nel parent se disponibile
+                if self.parent() and hasattr(self.parent(), 'output_text'):
+                    self.parent().output_text.append(f"🗑️ Trigger eliminato: {trigger_summary}")
+    
+    def delete_all_triggers(self):
+        """Elimina tutti i trigger e la configurazione"""
+        from PyQt6.QtWidgets import QMessageBox
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setWindowTitle("Conferma")
+        msg.setText("Eliminare TUTTA la schedulazione?\nQuesta azione è irreversibile.")
+        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msg.setStyleSheet("""
+            QMessageBox {
+                background-color: white;
+            }
+            QLabel {
+                color: black;
+                font-size: 10pt;
+            }
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                padding: 6px 16px;
+                border: none;
+                border-radius: 4px;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #da190b;
+            }
+        """)
+        reply = msg.exec()
+        if reply == QMessageBox.StandardButton.Yes:
+            self.triggers.clear()
+            self.schedule_config = {'delete_all': True}
+            super().accept()
+    
+    def clear_form(self):
+        """Pulisce il form per un nuovo inserimento"""
+        from PyQt6.QtCore import QTime, QDateTime
+        
+        self.once_radio.setChecked(True)
+        self.date_edit.setDateTime(QDateTime.currentDateTime())
+        self.time_edit.setTime(QTime.currentTime())
+        self.daily_interval.setValue(1)
+        for cb in self.weekday_checkboxes.values():
+            cb.setChecked(False)
+        self.editing_trigger_index = None
+        self.add_trigger_btn.setText("➕ Nuovo Trigger")
+    
+    def get_current_form_trigger(self):
+        """Estrae il trigger dal form corrente con validazione"""
+        from PyQt6.QtWidgets import QMessageBox
+        
+        if self.once_radio.isChecked():
+            return {
+                'type': 'once',
+                'data': {
+                    'datetime': self.date_edit.dateTime().toString("dd/MM/yyyy HH:mm")
+                }
+            }
+        elif self.daily_radio.isChecked():
+            return {
+                'type': 'daily',
+                'data': {
+                    'time': self.time_edit.time().toString("HH:mm"),
+                    'interval': self.daily_interval.value()
+                }
+            }
+        elif self.weekly_radio.isChecked():
+            selected_days = [day for day, cb in self.weekday_checkboxes.items() if cb.isChecked()]
+            if not selected_days:
+                msg = QMessageBox(self)
+                msg.setIcon(QMessageBox.Icon.Warning)
+                msg.setWindowTitle("Attenzione")
+                msg.setText("Seleziona almeno un giorno della settimana!")
+                msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+                msg.setStyleSheet("""
+                    QMessageBox {
+                        background-color: white;
+                    }
+                    QLabel {
+                        color: black;
+                        font-size: 10pt;
+                    }
+                    QPushButton {
+                        background-color: #2196F3;
+                        color: white;
+                        padding: 6px 16px;
+                        border: none;
+                        border-radius: 4px;
+                        min-width: 80px;
+                    }
+                    QPushButton:hover {
+                        background-color: #1976D2;
+                    }
+                """)
+                msg.exec()
+                return None
+            return {
+                'type': 'weekly',
+                'data': {
+                    'time': self.time_edit.time().toString("HH:mm"),
+                    'days': selected_days
+                }
+            }
+        return None
+    
+    def on_schedule_type_changed(self):
+        """Aggiorna la UI in base al tipo di schedulazione"""
+        if self.once_radio.isChecked():
+            self.date_label.setVisible(True)
+            self.date_edit.setVisible(True)
+            self.time_label.setVisible(False)
+            self.time_edit.setVisible(False)
+            self.weekdays_group.setVisible(False)
+            self.daily_group.setVisible(False)
+        elif self.daily_radio.isChecked():
+            self.date_label.setVisible(False)
+            self.date_edit.setVisible(False)
+            self.time_label.setVisible(True)
+            self.time_edit.setVisible(True)
+            self.weekdays_group.setVisible(False)
+            self.daily_group.setVisible(True)
+        elif self.weekly_radio.isChecked():
+            self.date_label.setVisible(False)
+            self.date_edit.setVisible(False)
+            self.time_label.setVisible(True)
+            self.time_edit.setVisible(True)
+            self.weekdays_group.setVisible(True)
+            self.daily_group.setVisible(False)
+    
+    def accept(self):
+        """Salva la configurazione di scheduling"""
+        task_name = self.task_name_input.text().strip()
+        
+        if not task_name:
+            from PyQt6.QtWidgets import QMessageBox
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setWindowTitle("Attenzione")
+            msg.setText("Inserisci un nome per l'attività!")
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QLabel {
+                    color: black;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #2196F3;
+                    color: white;
+                    padding: 6px 16px;
+                    border: none;
+                    border-radius: 4px;
+                    min-width: 80px;
+                }
+                QPushButton:hover {
+                    background-color: #1976D2;
+                }
+            """)
+            msg.exec()
+            return
+        
+        # Se non ci sono trigger, elimina la configurazione
+        if not self.triggers:
+            from PyQt6.QtWidgets import QMessageBox
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Question)
+            msg.setWindowTitle("Conferma")
+            msg.setText("Non ci sono trigger configurati.\nVuoi eliminare la schedulazione per questo script?")
+            msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg.setStyleSheet("""
+                QMessageBox {
+                    background-color: white;
+                }
+                QLabel {
+                    color: black;
+                    font-size: 10pt;
+                }
+                QPushButton {
+                    background-color: #2196F3;
+                    color: white;
+                    padding: 6px 16px;
+                    border: none;
+                    border-radius: 4px;
+                    min-width: 80px;
+                }
+                QPushButton:hover {
+                    background-color: #1976D2;
+                }
+            """)
+            msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            reply = msg.exec()
+            if reply == QMessageBox.StandardButton.Yes:
+                self.schedule_config = {'delete_all': True}
+                super().accept()
+            return
+        
+        self.schedule_config = {
+            'enabled': True,
+            'task_name': task_name,
+            'triggers': self.triggers
+        }
+        
+        super().accept()
