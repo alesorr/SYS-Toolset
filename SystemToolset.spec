@@ -4,8 +4,9 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = [('config/config.ini', 'config'), ('scripts', 'scripts'), ('docs', 'docs'), ('src/gui', 'gui')]
 binaries = []
-hiddenimports = ['config.config', 'config.setting', 'gui', 'gui.main_window', 'gui.splash_screen', 'db', 'db.script_repository', 'menu', 'menu.tool_menu', 'utils', 'utils.logger', 'utils.file_loader', 'models', 'models.script_model']
+hiddenimports = ['config.config', 'config.setting', 'gui', 'gui.main_window', 'gui.splash_screen', 'db', 'db.script_repository', 'menu', 'menu.tool_menu', 'utils', 'utils.logger', 'utils.file_loader', 'models', 'models.script_model', 'apscheduler.schedulers.background', 'apscheduler.triggers.cron', 'apscheduler.triggers.date', 'apscheduler.triggers.interval', 'apscheduler.executors.pool', 'apscheduler.jobstores.memory']
 hiddenimports += collect_submodules('gui')
+hiddenimports += collect_submodules('apscheduler')
 tmp_ret = collect_all('PyQt6')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 

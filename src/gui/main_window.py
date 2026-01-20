@@ -27,6 +27,20 @@ import traceback
 from pathlib import Path
 from config.config import ConfigManager
 from db.script_repository import ScriptRepository
+from utils.windows_scheduler import WindowsTaskScheduler
+
+# Import opzionale di APScheduler
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    from apscheduler.triggers.date import DateTrigger
+    from apscheduler.triggers.interval import IntervalTrigger
+    APSCHEDULER_AVAILABLE = True
+except ImportError:
+    APSCHEDULER_AVAILABLE = False
+    print("⚠️ APScheduler non disponibile - funzionalità di scheduling disabilitata")
+
+from datetime import datetime, timedelta
 
 class ScriptExecutorThread(QThread):
     """Thread per eseguire gli script senza bloccare l'UI"""
@@ -221,9 +235,22 @@ class MainWindow(QMainWindow):
         self.executor_thread = None
         self.current_category = None
         self.current_script = None
-
+        
+        # Inizializza il Windows Task Scheduler
+        self.windows_scheduler = WindowsTaskScheduler()
+        
+        # Inizializza lo scheduler solo se disponibile
+        self.scheduler = None
+        if APSCHEDULER_AVAILABLE:
+            self.scheduler = BackgroundScheduler()
+            self.scheduler.start()
+        
         self.initUI()
         self.show_config_banner()
+        
+        # Carica e attiva tutti gli schedule salvati
+        if self.scheduler:
+            self.load_all_schedules()
     
     def _style_messagebox(self, msg_box):
         """Applica lo stile uniforme a tutti i QMessageBox"""
@@ -1499,6 +1526,8 @@ class MainWindow(QMainWindow):
                     self.output_text.append(f"\n✅ Schedulazione SALVATA")
                     self.output_text.append(f"📝 Task: {self.schedule_config.get('task_name', '')}")
                     self.output_text.append(f"⏰ Trigger configurati: {num_triggers}")
+                    self.output_text.append(f"🔒 Lo script verrà eseguito automaticamente ANCHE SE L'APP È CHIUSA")
+                    self.output_text.append(f"📄 I log saranno salvati nella cartella 'logs'")
         finally:
             overlay.deleteLater()
     
@@ -1527,15 +1556,78 @@ class MainWindow(QMainWindow):
         return self.get_schedules_dir() / f"{safe_name}.json"
     
     def save_schedule_config(self, script_name, config):
-        """Salva la configurazione di scheduling in un file JSON"""
+        """Salva la configurazione di scheduling in un file JSON e crea i task in Windows"""
         import json
+        import sys
         filepath = self.get_schedule_filepath(script_name)
         try:
+            # Salva il file JSON
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
             self.output_text.append(f"💾 Configurazione salvata in: {filepath}")
+            
+            # Se la schedulazione è abilitata, crea i task nel Windows Task Scheduler
+            if config.get('enabled', False):
+                # Trova lo script nel repository
+                script_info = None
+                for script in self.repository.get_all_scripts():
+                    if script.get('name') == script_name:
+                        script_info = script
+                        break
+                
+                if script_info:
+                    # Path completo dello script
+                    relative_path = script_info.get('path', '')
+                    if getattr(sys, 'frozen', False):
+                        base_dir = Path(sys.executable).parent
+                    else:
+                        base_dir = Path(__file__).parent.parent.parent
+                    
+                    script_path = base_dir / "scripts" / relative_path
+                    working_dir = base_dir
+                    
+                    # Crea i task in un thread separato per non bloccare la GUI
+                    from threading import Thread
+                    
+                    def create_tasks_async():
+                        success_count = 0
+                        error_messages = []
+                        for idx, trigger_config in enumerate(config.get('triggers', [])):
+                            # Crea un nome unico per ogni trigger
+                            trigger_type = trigger_config.get('type', 'unknown')
+                            unique_name = f"{script_name}_{trigger_type}_{idx}"
+                            
+                            result, error_msg = self.windows_scheduler.create_task(
+                                script_name=unique_name,
+                                script_path=script_path,
+                                trigger_config=trigger_config,
+                                working_dir=working_dir
+                            )
+                            
+                            if result:
+                                success_count += 1
+                            else:
+                                error_messages.append(f"❌ {unique_name}: {error_msg}")
+                        
+                        # Aggiorna l'output nel thread principale
+                        if success_count > 0:
+                            self.output_text.append(f"✅ {success_count} task Windows creati - Verranno eseguiti anche con l'app chiusa")
+                        else:
+                            self.output_text.append(f"⚠️ Nessun task Windows creato")
+                            if error_messages:
+                                for msg in error_messages:
+                                    self.output_text.append(msg)
+                    
+                    self.output_text.append(f"⏳ Creazione task Windows in corso...")
+                    thread = Thread(target=create_tasks_async, daemon=True)
+                    thread.start()
+                else:
+                    self.output_text.append(f"❌ Script non trovato nel repository: {script_name}")
+                        
         except Exception as e:
             self.output_text.append(f"❌ Errore nel salvataggio: {e}")
+            import traceback
+            traceback.print_exc()
     
     def load_schedule_config(self, script_name):
         """Carica la configurazione di scheduling da file JSON"""
@@ -1551,14 +1643,234 @@ class MainWindow(QMainWindow):
         return None
     
     def delete_schedule_config(self, script_name):
-        """Elimina il file di configurazione scheduling"""
+        """Elimina il file di configurazione scheduling e i task Windows"""
         filepath = self.get_schedule_filepath(script_name)
         if filepath.exists():
             try:
+                # Carica la configurazione per sapere quanti task eliminare
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                
+                # Elimina i task dal Windows Task Scheduler
+                deleted_count = 0
+                for idx, trigger_config in enumerate(config.get('triggers', [])):
+                    trigger_type = trigger_config.get('type', 'unknown')
+                    unique_name = f"{script_name}_{trigger_type}_{idx}"
+                    if self.windows_scheduler.delete_task(unique_name):
+                        deleted_count += 1
+                
+                # Elimina anche il task generico (per retrocompatibilità)
+                self.windows_scheduler.delete_task(script_name)
+                
+                # Elimina il file di configurazione
                 filepath.unlink()
-                self.output_text.append(f"🗑️ File configurazione eliminato: {filepath}")
+                
+                # Rimuovi anche dal scheduler in-process se presente
+                if self.scheduler:
+                    job_id = f"script_{script_name.replace(' ', '_')}"
+                    try:
+                        if self.scheduler.get_job(job_id):
+                            self.scheduler.remove_job(job_id)
+                    except:
+                        pass
+                
+                self.output_text.append(f"🗑️ File configurazione e {deleted_count} task Windows eliminati")
             except Exception as e:
                 self.output_text.append(f"❌ Errore nell'eliminazione: {e}")
+                import traceback
+                traceback.print_exc()
+    
+    def load_all_schedules(self):
+        """Carica e attiva tutti gli schedule salvati"""
+        if not self.scheduler:
+            return
+            
+        schedules_dir = self.get_schedules_dir()
+        if not schedules_dir.exists():
+            return
+        
+        schedule_files = list(schedules_dir.glob("*.json"))
+        loaded_count = 0
+        
+        for schedule_file in schedule_files:
+            try:
+                with open(schedule_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                
+                if not config.get('enabled', False):
+                    continue
+                
+                # Estrae il nome dello script dal nome del file
+                script_name = schedule_file.stem.replace('_', ' ')
+                
+                # Cerca lo script nel repository
+                script_info = None
+                for script in self.repository.get_all_scripts():
+                    if script.get('name', '').replace(' ', '_') == schedule_file.stem:
+                        script_info = script
+                        script_name = script.get('name')
+                        break
+                
+                if not script_info:
+                    continue
+                
+                # Aggiungi i trigger allo scheduler
+                job_id = f"script_{script_name.replace(' ', '_')}"
+                
+                for trigger_config in config.get('triggers', []):
+                    self.add_scheduled_job(job_id, script_name, script_info, trigger_config)
+                    loaded_count += 1
+                
+            except Exception as e:
+                print(f"Errore caricamento schedule {schedule_file}: {e}")
+        
+        if loaded_count > 0:
+            print(f"✅ {loaded_count} schedule caricati e attivati")
+    
+    def add_scheduled_job(self, job_id, script_name, script_info, trigger_config):
+        """Aggiunge un job schedulato allo scheduler"""
+        if not self.scheduler or not APSCHEDULER_AVAILABLE:
+            return
+            
+        trigger_type = trigger_config.get('type')
+        
+        try:
+            if trigger_type == 'once':
+                # Esecuzione una tantum
+                exec_time = datetime.fromisoformat(trigger_config['datetime'])
+                trigger = DateTrigger(run_date=exec_time)
+                
+            elif trigger_type == 'daily':
+                # Esecuzione giornaliera
+                time_str = trigger_config['time']
+                hour, minute = map(int, time_str.split(':'))
+                trigger = CronTrigger(hour=hour, minute=minute)
+                
+            elif trigger_type == 'weekly':
+                # Esecuzione settimanale
+                days = trigger_config['days']
+                time_str = trigger_config['time']
+                hour, minute = map(int, time_str.split(':'))
+                day_of_week = ','.join(days)
+                trigger = CronTrigger(day_of_week=day_of_week, hour=hour, minute=minute)
+                
+            elif trigger_type == 'interval':
+                # Esecuzione a intervalli
+                interval_type = trigger_config['interval_type']
+                interval_value = trigger_config['interval_value']
+                
+                if interval_type == 'minutes':
+                    trigger = IntervalTrigger(minutes=interval_value)
+                elif interval_type == 'hours':
+                    trigger = IntervalTrigger(hours=interval_value)
+                elif interval_type == 'days':
+                    trigger = IntervalTrigger(days=interval_value)
+                else:
+                    return
+            else:
+                return
+            
+            # Aggiungi il job allo scheduler
+            unique_job_id = f"{job_id}_{trigger_type}_{id(trigger_config)}"
+            self.scheduler.add_job(
+                func=self.execute_scheduled_script,
+                trigger=trigger,
+                args=[script_name, script_info],
+                id=unique_job_id,
+                replace_existing=True,
+                name=f"Schedule: {script_name}"
+            )
+            
+        except Exception as e:
+            print(f"Errore aggiunta job schedulato: {e}")
+    
+    def execute_scheduled_script(self, script_name, script_info):
+        """Esegue uno script schedulato in background con log"""
+        import sys
+        try:
+            # Crea directory logs se non esiste
+            if getattr(sys, 'frozen', False):
+                exe_dir = Path(sys.executable).parent
+                logs_dir = exe_dir / "logs"
+            else:
+                base_dir = Path(__file__).parent.parent.parent
+                logs_dir = base_dir / "logs"
+            
+            logs_dir.mkdir(exist_ok=True)
+            
+            # Crea file di log con timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_name = script_name.replace(' ', '_').replace('/', '_').replace('\\', '_')
+            log_filename = f"scheduled_{safe_name}_{timestamp}.log"
+            log_file = logs_dir / log_filename
+            
+            # Ottieni il path completo dello script
+            relative_path = script_info.get('path', '')
+            if getattr(sys, 'frozen', False):
+                exe_dir = Path(sys.executable).parent
+                script_path = exe_dir / "scripts" / relative_path
+            else:
+                base_dir = Path(__file__).parent.parent.parent
+                script_path = base_dir / "scripts" / relative_path
+            
+            if not script_path.exists():
+                with open(log_file, 'w', encoding='utf-8') as f:
+                    f.write(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ ERRORE: Script non trovato: {script_path}\n")
+                return
+            
+            # Determina il comando
+            if script_path.suffix.lower() == '.ps1':
+                cmd = ['powershell', '-ExecutionPolicy', 'Bypass', '-File', str(script_path)]
+            elif script_path.suffix.lower() == '.py':
+                cmd = [sys.executable, str(script_path)]
+            elif script_path.suffix.lower() in ['.bat', '.cmd']:
+                cmd = ['cmd', '/c', str(script_path)]
+            else:
+                cmd = [str(script_path)]
+            
+            # Scrivi header nel log
+            with open(log_file, 'w', encoding='utf-8') as f:
+                f.write(f"=== Esecuzione Schedulata: {script_name} ===\n")
+                f.write(f"Data/Ora: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"Script: {script_path}\n")
+                f.write(f"Comando: {' '.join(cmd)}\n")
+                f.write("=" * 60 + "\n\n")
+            
+            # Esegui lo script
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            
+            # Scrivi output nel log
+            with open(log_file, 'a', encoding='utf-8') as f:
+                if result.stdout:
+                    f.write("Output:\n")
+                    f.write(result.stdout + "\n")
+                
+                if result.stderr:
+                    f.write("\nErrori:\n")
+                    f.write(result.stderr + "\n")
+                
+                f.write("\n" + "=" * 60 + "\n")
+                if result.returncode == 0:
+                    f.write(f"✅ Completato con successo (exit code: 0)\n")
+                else:
+                    f.write(f"❌ Errore (exit code: {result.returncode})\n")
+                
+                f.write(f"Log salvato: {log_file}\n")
+            
+        except subprocess.TimeoutExpired:
+            with open(log_file, 'a', encoding='utf-8') as f:
+                f.write(f"\n❌ ERRORE: Timeout (5 minuti)\n")
+        except Exception as e:
+            try:
+                with open(log_file, 'a', encoding='utf-8') as f:
+                    f.write(f"\n❌ ERRORE: {e}\n")
+            except:
+                pass
     
     def on_workflow_clicked(self):
         """Apre il dialog per gestire i workflow"""

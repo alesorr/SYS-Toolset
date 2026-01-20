@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "task_name": "SYS_Toolset_Restart_Dispatcher",
+  "triggers": [
+    {
+      "type": "once",
+      "data": {
+        "datetime": "19/01/2026 03:20"
+      }
+    }
+  ]
+}

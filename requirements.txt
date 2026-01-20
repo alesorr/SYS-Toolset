@@ -3,6 +3,8 @@ colorama
 rich
 # GUI Framework
 PyQt6>=6.0.0
+# Scheduling
+APScheduler>=3.10.0
 # Build & Packaging
 PyInstaller>=6.0.0
 # Development & Testing
